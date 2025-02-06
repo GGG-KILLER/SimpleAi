@@ -1,0 +1,6 @@
+﻿<FineCodeCoverage>
+    <Enabled>True</Enabled>
+    <RunMsCodeCoverage>Yes</RunMsCodeCoverage>
+
+    <ExcludeAssemblies>SimpleAi.Tests</ExcludeAssemblies>
+</FineCodeCoverage>
