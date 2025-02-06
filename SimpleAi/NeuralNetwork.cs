@@ -1,89 +1,103 @@
-﻿using System.Diagnostics;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace SimpleAi;
 
-public readonly struct NeuralNetwork<T>
-    where T : INumber<T>, ISignedNumber<T>, IExponentialFunctions<T>
+public sealed class NeuralNetwork<T>
+    where T : unmanaged, INumber<T>
 {
     private readonly Layer<T>[] _layers;
 
+    public int Inputs { get; }
+
+    public int Outputs { get; }
+
+    public ReadOnlySpan<Layer<T>> Layers => _layers.AsSpan();
+
     public NeuralNetwork(int inputs, params ReadOnlySpan<int> layerSizes)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputs);
+        if (layerSizes.Length < 1)
+        {
+            throw new ArgumentException("At least one layer is required.", nameof(layerSizes));
+        }
+
+        Inputs = inputs;
+        Outputs = layerSizes[^1];
         _layers = new Layer<T>[layerSizes.Length];
 
         for (var idx = 0; idx < layerSizes.Length; idx++)
         {
+            if (layerSizes[idx] <= 0)
+            {
+                throw new ArgumentException("Layer sizes must be greater than zero.", nameof(layerSizes));
+            }
+
             _layers[idx] = new Layer<T>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
         }
     }
-}
 
-public readonly struct Layer<T>(int inputs, int nodes)
-    where T : INumber<T>, ISignedNumber<T>, IExponentialFunctions<T>
-{
-    private readonly T[] _weights = new T[nodes * MathEx.DivideRoundingUp(inputs, Vector<T>.Count) * Vector<T>.Count];
-    private readonly T[] _biases = new T[nodes];
-
-    public int ExpectedInputs => inputs;
-    public int ActualInputs { get; } = MathEx.DivideRoundingUp(inputs, Vector<T>.Count) * Vector<T>.Count;
-    public int Nodes => nodes;
-
-    public readonly void Randomize(T scale)
+    private NeuralNetwork(Layer<T>[] layers)
     {
-        // TODO: Use a normal distribution RNG
-        for (var nodeIdx = 0; nodeIdx < _weights.Length; nodeIdx++)
-        {
-            for (var inputIdx = 0; inputIdx < ActualInputs; inputIdx++)
-            {
-                if (inputIdx < ExpectedInputs)
-                    _weights[nodeIdx * ActualInputs + inputIdx] = T.CreateSaturating(Random.Shared.NextDouble()) * scale;
-                else
-                    _weights[nodeIdx * ActualInputs + inputIdx] = T.Zero;
-            }
-        }
+        _layers = layers;
+        Inputs = layers[0].Inputs;
+        Outputs = layers[^1].Size;
+    }
 
-        for (var nodeIdx = 0; nodeIdx < _biases.Length; nodeIdx++)
+    public static NeuralNetwork<T> UnsafeLoad(T[][] weights, T[][] biases)
+    {
+        var layers = new Layer<T>[weights.Length];
+        for (var idx = 0; idx < weights.Length; idx++)
         {
-            _biases[nodeIdx] = T.CreateSaturating(Random.Shared.NextDouble()) * scale;
+            layers[idx] = Layer<T>.LoadUnsafe(weights[idx], biases[idx]);
+        }
+        return new NeuralNetwork<T>(layers);
+    }
+
+    public void Randomize(T scale)
+    {
+        for (int idx = 0; idx < _layers.Length; idx++)
+        {
+            _layers.UnsafeIndex(idx).Randomize(scale);
         }
     }
 
-    public readonly void Calculate(ReadOnlySpan<T> inputs, Span<T> outputs)
+    [SkipLocalsInit]
+    public void RunInference(ReadOnlySpan<T> inputs, Span<T> output)
     {
-        Debug.Assert(inputs.Length == ActualInputs, "Inputs are not the correct size.");
-        Debug.Assert(outputs.Length == Nodes, "Outputs are not the correct size.");
-
-        ref T output = ref MemoryMarshal.GetReference(outputs);
-        ref T outputEnd = ref Unsafe.Add(ref output, outputs.Length);
-        ref T weights = ref MemoryMarshal.GetArrayDataReference(_weights);
-        ref T weightsEnd = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_weights), _weights.Length);
-        ref T bias = ref MemoryMarshal.GetArrayDataReference(_biases);
-        ref T biasEnd = ref Unsafe.Add(ref bias, _biases.Length);
-        do
+        if (inputs.Length != Inputs)
         {
-            while (false) ;
-
-            output = ref Unsafe.Add(ref output, 1);
-            weights = ref Unsafe.Add(ref weights, inputs.Length);
-            bias = ref Unsafe.Add(ref bias, 1);
+            throw new ArgumentException("Input vector does not have the correct amount of elements.", nameof(inputs));
         }
-        while (Unsafe.IsAddressLessThan(ref weights, ref weightsEnd)
-               && Unsafe.IsAddressLessThan(ref bias, ref biasEnd)
-               && Unsafe.IsAddressLessThan(ref output, ref outputEnd));
+        if (output.Length != Outputs)
+        {
+            throw new ArgumentException("Output does not have the correct size.", nameof(output));
+        }
 
-        Debug.Assert(!Unsafe.IsAddressLessThan(ref weights, ref weightsEnd), "Did not use all weights.");
-        Debug.Assert(!Unsafe.IsAddressLessThan(ref bias, ref biasEnd), "Did not use all biases.");
-        Debug.Assert(!Unsafe.IsAddressLessThan(ref output, ref outputEnd), "Did not set all outputs.");
+        var outputBuffersSize = _layers.Select(x => int.Max(x.Inputs, x.Size)).Max();
+
+        Span<T> inBuffer = outputBuffersSize <= (1024 / Marshal.SizeOf<T>())
+            ? stackalloc T[outputBuffersSize]
+            : new T[outputBuffersSize];
+        Span<T> outBuffer = outputBuffersSize <= (1024 / Marshal.SizeOf<T>())
+            ? stackalloc T[outputBuffersSize]
+            : new T[outputBuffersSize];
+
+        inputs.CopyTo(inBuffer);
+        for (var layerIdx = 0; layerIdx < _layers.Length; layerIdx++)
+        {
+            var layer = _layers.UnsafeIndex(layerIdx);
+
+            layer.RunInference(inBuffer[..layer.Inputs], outBuffer[..layer.Size]);
+
+            var tmp = outBuffer;
+            outBuffer = inBuffer;
+            inBuffer = tmp;
+        }
+
+        // After the last iteration, the output buffer gets swapped with the input,
+        // so we copy it to the final output.
+        inBuffer[..Outputs].CopyTo(output);
     }
-}
-
-
-
-internal static class MathEx
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int DivideRoundingUp(int number, int divisor) => (number + divisor - 1) / divisor;
 }
