@@ -7,4 +7,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SimpleAi.Benchmarks" />
+    <InternalsVisibleTo Include="SimpleAi.Tests" />
+  </ItemGroup>
+
 </Project>

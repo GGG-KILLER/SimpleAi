@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SimpleAi.Math;
 
 namespace SimpleAi;
@@ -59,83 +59,26 @@ public sealed class Layer<T>
         var inputCount = Inputs;
         var neuronCount = Size;
 
-        Debug.Assert(inputs.Length == inputCount, "Inputs are not the correct size.");
-        Debug.Assert(outputs.Length >= neuronCount, "Outputs are not the correct size.");
+        if (inputs.Length != inputCount)
+            throw new ArgumentException($"Inputs are not the correct size. ({inputs.Length} != {inputCount})", nameof(inputs));
+        if (outputs.Length < neuronCount)
+            throw new ArgumentException($"Outputs are not the correct size. ({outputs.Length} < {neuronCount})", nameof(outputs));
 
-        ref T weights = ref _weights.Ref();
-
-        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && inputs.Length > Vector<T>.Count * 2)
+        var neuronIdx = 0;
+        ref T weights = ref _weights!.Ref();
+        ref T output = ref outputs.Ref();
+        ref T outputEnd = ref outputs.UnsafeIndex(neuronCount);
+        while (Unsafe.IsAddressLessThan(ref output, ref outputEnd))
         {
-            var idx = 0;
+            output = MathEx.Aggregate<T, MulOp<T>, AddOp<T>>(
+                MemoryMarshal.CreateReadOnlySpan(ref weights, Inputs),
+                inputs);
 
-            Span<Vector<T>> neuronVecAccs = neuronCount < 16
-                ? stackalloc Vector<T>[neuronCount]
-                : new Vector<T>[neuronCount];
-            neuronVecAccs.Fill(Vector<T>.Zero);
-
-            for (; idx < inputs.Length - Vector<T>.Count; idx += Vector<T>.Count)
-            {
-                var leftVec = Vector.LoadUnsafe(ref inputs.UnsafeIndex(idx));
-                for (var neuronIdx = 0; neuronIdx < Size; neuronIdx++)
-                {
-                    ref var vecAcc = ref neuronVecAccs.UnsafeIndex(neuronIdx);
-                    var rightVec = Vector.LoadUnsafe(ref Unsafe.Add(ref weights, neuronIdx * Inputs + idx));
-
-                    if (typeof(T) == typeof(double))
-                    {
-                        vecAcc = Vector.FusedMultiplyAdd(
-                            leftVec.As<T, double>(),
-                            rightVec.As<T, double>(),
-                            vecAcc.As<T, double>()).As<double, T>();
-                    }
-                    else if (typeof(T) == typeof(float))
-                    {
-                        vecAcc = Vector.FusedMultiplyAdd(
-                            leftVec.As<T, float>(),
-                            rightVec.As<T, float>(),
-                            vecAcc.As<T, float>()).As<float, T>();
-                    }
-                    else
-                    {
-                        vecAcc += leftVec * rightVec;
-                    }
-                }
-            }
-
-            var slowStart = idx;
-            for (var neuronIdx = 0; neuronIdx < Size; neuronIdx++)
-            {
-                var acc = Vector.Sum(neuronVecAccs.UnsafeIndex(neuronIdx));
-
-                for (idx = slowStart; idx < inputCount; idx++)
-                {
-                    var leftNum = inputs.UnsafeIndex(idx);
-                    var rightNum = Unsafe.Add(ref weights, neuronIdx * inputCount + idx);
-                    acc += leftNum * rightNum;
-                }
-
-                outputs.UnsafeIndex(neuronIdx) = acc;
-            }
-
-            MathEx.Binary<T, BUPipeline<T, AddOp<T>, ReLUOp<T>>>(outputs, _biases, outputs);
+            neuronIdx++;
+            weights = ref Unsafe.Add(ref weights, Inputs);
+            output = ref Unsafe.Add(ref output, 1);
         }
-        else // Software fallback
-        {
-            var biases = _biases;
 
-            for (var neuronIdx = 0; neuronIdx < Size; neuronIdx++)
-            {
-                var acc = T.Zero;
-
-                for (var idx = 0; idx < inputCount; idx++)
-                {
-                    var input = inputs.UnsafeIndex(idx);
-                    var weight = Unsafe.Add(ref weights, neuronIdx * inputCount + idx);
-                    acc += input * weight;
-                }
-
-                outputs.UnsafeIndex(neuronIdx) = MathEx.ReLU(acc + biases.UnsafeIndex(neuronIdx));
-            }
-        }
+        MathEx.Binary<T, BUPipeline<T, AddOp<T>, ReLUOp<T>>>(outputs, _biases, outputs);
     }
 }
