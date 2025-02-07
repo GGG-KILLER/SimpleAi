@@ -6,25 +6,25 @@ namespace SimpleAi.Math;
 
 // Interface heavily inspired by Microsoft's Tensor library
 
-public interface IUnaryOp<T>
+internal interface IUnaryOp<T>
 {
     static abstract T Execute(T arg);
     static abstract Vector<T> Execute(Vector<T> args);
 }
 
-public interface IBinaryOp<T>
+internal interface IBinaryOp<T>
 {
     static abstract T Execute(T left, T right);
     static abstract Vector<T> Execute(Vector<T> lefts, Vector<T> rights);
 }
 
-public interface ITernaryOp<T>
+internal interface ITernaryOp<T>
 {
     static abstract T Execute(T left, T middle, T right);
     static abstract Vector<T> Execute(Vector<T> lefts, Vector<T> middles, Vector<T> rights);
 }
 
-public interface IAggregateOp<T> : IBinaryOp<T>
+internal interface IAggregateOp<T> : IBinaryOp<T>
 {
     static abstract T InitialScalar { get; }
     static abstract Vector<T> InitialVector { get; }
@@ -32,14 +32,14 @@ public interface IAggregateOp<T> : IBinaryOp<T>
     static abstract T Execute(Vector<T> args);
 }
 
-public readonly struct ReLUOp<T> : IUnaryOp<T>
+internal readonly struct ReLUOp<T> : IUnaryOp<T>
     where T : INumber<T>
 {
     public static T Execute(T arg) => T.Max(T.Zero, arg);
     public static Vector<T> Execute(Vector<T> args) => Vector.Max(Vector<T>.Zero, args);
 }
 
-public readonly struct AddOp<T> : IAggregateOp<T>
+internal readonly struct AddOp<T> : IAggregateOp<T>
     where T : IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>
 {
     public static T InitialScalar => T.AdditiveIdentity;
@@ -50,7 +50,7 @@ public readonly struct AddOp<T> : IAggregateOp<T>
     public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts + rights;
 }
 
-public readonly struct MulOp<T> : IAggregateOp<T>
+internal readonly struct MulOp<T> : IAggregateOp<T>
     where T : IMultiplicativeIdentity<T, T>, IMultiplyOperators<T, T, T>
 {
     public static T InitialScalar => T.MultiplicativeIdentity;
@@ -67,7 +67,7 @@ public readonly struct MulOp<T> : IAggregateOp<T>
     public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts * rights;
 }
 
-public readonly struct BUPipeline<T, TBin, TUn> : IBinaryOp<T>
+internal readonly struct BUPipeline<T, TBin, TUn> : IBinaryOp<T>
     where TBin : IBinaryOp<T>
     where TUn : IUnaryOp<T>
 {
