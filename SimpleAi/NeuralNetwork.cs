@@ -79,10 +79,10 @@ public sealed class NeuralNetwork<T>
 
         Span<T> inBuffer = outputBuffersSize <= (1024 / Marshal.SizeOf<T>())
             ? stackalloc T[outputBuffersSize]
-            : new T[outputBuffersSize];
+            : GC.AllocateUninitializedArray<T>(outputBuffersSize);
         Span<T> outBuffer = outputBuffersSize <= (1024 / Marshal.SizeOf<T>())
             ? stackalloc T[outputBuffersSize]
-            : new T[outputBuffersSize];
+            : GC.AllocateUninitializedArray<T>(outputBuffersSize);
 
         inputs.CopyTo(inBuffer);
         for (var layerIdx = 0; layerIdx < _layers.Length; layerIdx++)
