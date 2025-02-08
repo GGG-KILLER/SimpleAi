@@ -7,10 +7,12 @@ namespace SimpleAi.Benchmarks;
 [MemoryRandomization]
 public class LayerInferenceBenchmark
 {
-    private Layer<float> _floatLayer;
-    private Layer<double> _doubleLayer;
+    private Layer<float>? _floatLayer;
+    private Layer<double>? _doubleLayer;
     private float[]? _floatInputs;
     private double[]? _doubleInputs;
+    private float[]? _floatOutputs;
+    private double[]? _doubleOutputs;
 
     [Params(5, 10, 250, 5000, 10_000)]
     public int Inputs { get; set; }
@@ -29,25 +31,17 @@ public class LayerInferenceBenchmark
         _floatInputs = new float[Inputs];
         for (var idx = 0; idx < _floatInputs.Length; idx++)
             _floatInputs[idx] = Random.Shared.NextSingle() * Random.Shared.Next();
+        _floatOutputs = new float[Neurons];
 
         _doubleInputs = new double[Inputs];
         for (var idx = 0; idx < _doubleInputs.Length; idx++)
             _doubleInputs[idx] = Random.Shared.NextDouble() * Random.Shared.Next();
+        _doubleOutputs = new double[Neurons];
     }
 
     [Benchmark]
-    public float[] FloatInfer()
-    {
-        var output = GC.AllocateUninitializedArray<float>(Neurons);
-        _floatLayer.RunInference(_floatInputs, output);
-        return output;
-    }
+    public void FloatInfer() => _floatLayer!.RunInference(_floatInputs, _floatOutputs);
 
     [Benchmark]
-    public double[] DoubleInfer()
-    {
-        var output = GC.AllocateUninitializedArray<double>(Neurons);
-        _doubleLayer.RunInference(_doubleInputs, output);
-        return output;
-    }
+    public void DoubleInfer() => _doubleLayer!.RunInference(_doubleInputs, _doubleOutputs);
 }

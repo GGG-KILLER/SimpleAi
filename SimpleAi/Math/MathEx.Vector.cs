@@ -6,77 +6,6 @@ namespace SimpleAi.Math;
 
 // Interface heavily inspired by Microsoft's Tensor library
 
-internal interface IUnaryOp<T>
-{
-    static abstract T Execute(T arg);
-    static abstract Vector<T> Execute(Vector<T> args);
-}
-
-internal interface IBinaryOp<T>
-{
-    static abstract T Execute(T left, T right);
-    static abstract Vector<T> Execute(Vector<T> lefts, Vector<T> rights);
-}
-
-internal interface ITernaryOp<T>
-{
-    static abstract T Execute(T left, T middle, T right);
-    static abstract Vector<T> Execute(Vector<T> lefts, Vector<T> middles, Vector<T> rights);
-}
-
-internal interface IAggregateOp<T> : IBinaryOp<T>
-{
-    static abstract T InitialScalar { get; }
-    static abstract Vector<T> InitialVector { get; }
-
-    static abstract T Execute(Vector<T> args);
-}
-
-internal readonly struct ReLUOp<T> : IUnaryOp<T>
-    where T : INumber<T>
-{
-    public static T Execute(T arg) => T.Max(T.Zero, arg);
-    public static Vector<T> Execute(Vector<T> args) => Vector.Max(Vector<T>.Zero, args);
-}
-
-internal readonly struct AddOp<T> : IAggregateOp<T>
-    where T : IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>
-{
-    public static T InitialScalar => T.AdditiveIdentity;
-    public static Vector<T> InitialVector => Vector<T>.Zero;
-
-    public static T Execute(Vector<T> args) => Vector.Sum(args);
-    public static T Execute(T left, T right) => left + right;
-    public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts + rights;
-}
-
-internal readonly struct MulOp<T> : IAggregateOp<T>
-    where T : IMultiplicativeIdentity<T, T>, IMultiplyOperators<T, T, T>
-{
-    public static T InitialScalar => T.MultiplicativeIdentity;
-    public static Vector<T> InitialVector => Vector<T>.One;
-
-    public static T Execute(Vector<T> args)
-    {
-        var acc = T.MultiplicativeIdentity;
-        for (var idx = 0; idx < Vector<T>.Count; idx++)
-            acc *= args.GetElement(idx);
-        return acc;
-    }
-    public static T Execute(T left, T right) => left * right;
-    public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts * rights;
-}
-
-internal readonly struct BUPipeline<T, TBin, TUn> : IBinaryOp<T>
-    where TBin : IBinaryOp<T>
-    where TUn : IUnaryOp<T>
-{
-    public static T Execute(T left, T right) => TUn.Execute(TBin.Execute(left, right));
-
-    public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) =>
-        TUn.Execute(TBin.Execute(lefts, rights));
-}
-
 internal static partial class MathEx
 {
     private static bool InputOutputSpanNonOverlapping<T>(ReadOnlySpan<T> input, Span<T> output)
@@ -84,8 +13,9 @@ internal static partial class MathEx
         return Unsafe.AreSame(ref input.Ref(), ref output.Ref()) || !input.Overlaps(output);
     }
 
+    [SkipLocalsInit]
     public static void Unary<T, TOp>(ReadOnlySpan<T> inputs, Span<T> outputs)
-        where TOp : IUnaryOp<T>
+        where TOp : struct, IUnOp<T>
     {
         Debug.Assert(inputs.Length <= outputs.Length);
         Debug.Assert(InputOutputSpanNonOverlapping(inputs, outputs));
@@ -107,8 +37,9 @@ internal static partial class MathEx
         }
     }
 
+    [SkipLocalsInit]
     public static void Binary<T, TOp>(ReadOnlySpan<T> lefts, ReadOnlySpan<T> rights, Span<T> outputs)
-        where TOp : IBinaryOp<T>
+        where TOp : struct, IBinOp<T>
     {
         Debug.Assert(lefts.Length == rights.Length, "Both inputs must be the same size.");
         Debug.Assert(lefts.Length <= outputs.Length, "Output must have enough space to store results.");
@@ -133,12 +64,13 @@ internal static partial class MathEx
         }
     }
 
+    [SkipLocalsInit]
     public static void Ternary<T, TOp>(
         ReadOnlySpan<T> lefts,
         ReadOnlySpan<T> middles,
         ReadOnlySpan<T> rights,
         Span<T> outputs)
-        where TOp : ITernaryOp<T>
+        where TOp : struct, ITernaryOp<T>
     {
         Debug.Assert(lefts.Length == rights.Length && middles.Length == rights.Length, "All inputs must be the same size.");
         Debug.Assert(lefts.Length <= outputs.Length, "Output must have enough space to store results.");
@@ -168,9 +100,10 @@ internal static partial class MathEx
         }
     }
 
+    [SkipLocalsInit]
     public static T Aggregate<T, TUnOp, TAggOp>(ReadOnlySpan<T> inputs)
-        where TUnOp : IUnaryOp<T>
-        where TAggOp : IAggregateOp<T>
+        where TUnOp : struct, IUnOp<T>
+        where TAggOp : struct, IAggOp<T>
     {
         var idx = 0;
         var acc = TAggOp.InitialScalar;
@@ -196,9 +129,10 @@ internal static partial class MathEx
         return acc;
     }
 
+    [SkipLocalsInit]
     public static T Aggregate<T, TBinOp, TAggOp>(ReadOnlySpan<T> lefts, ReadOnlySpan<T> rights)
-        where TBinOp : IBinaryOp<T>
-        where TAggOp : IAggregateOp<T>
+        where TBinOp : struct, IBinOp<T>
+        where TAggOp : struct, IAggOp<T>
     {
         Debug.Assert(lefts.Length == rights.Length, "Both inputs must be the same size.");
 
