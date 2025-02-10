@@ -7,13 +7,13 @@ public class HardwareIntLayerTests
     public static TheoryData<Type> ExecutesCorrectlyOnIntegerVectorizationPathData() => [.. ActivationHelper.GetNonExponentiatingActivationTypes<int>()];
     [Theory(Skip = "Vector<int> is not hardware accelerated.", SkipUnless = nameof(SkipConditions.IntVectorsAreHardwareAccelerated), SkipType = typeof(SkipConditions))]
     [MemberData(nameof(ExecutesCorrectlyOnIntegerVectorizationPathData))]
-    public void Layer_RunInference_ExecutesCorrectlyOnIntegerVectorizationPath(Type activationFunction)
+    public void LayerX2ERunInference_Executes_correctly_on_integer_vectorization_path(Type activationFunction)
     {
-        typeof(HardwareIntLayerTests).GetMethod(nameof(Layer_RunInference_ExecutesCorrectlyOnIntegerVectorizationPathCore), BindingFlags.Static | BindingFlags.NonPublic)!
+        typeof(HardwareIntLayerTests).GetMethod(nameof(Layer_RunInference_Executes_correctly_on_integer_vectorization_pathCore), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(activationFunction)
             .Invoke(null, null);
     }
-    private static void Layer_RunInference_ExecutesCorrectlyOnIntegerVectorizationPathCore<T>()
+    private static void Layer_RunInference_Executes_correctly_on_integer_vectorization_pathCore<T>()
         where T : IActivationFunction<int>
     {
         var layer = Layer<int, T>.LoadUnsafe([

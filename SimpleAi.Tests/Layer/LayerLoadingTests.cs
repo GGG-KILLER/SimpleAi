@@ -3,7 +3,7 @@ namespace SimpleAi.Tests.Layer;
 public class LayerLoadingTests
 {
     [Fact]
-    public void Layer_LoadUnsafe_CorrectlyCopiesValuesIntoFields()
+    public void LayerX2ELoadUnsafe_Correctly_copies_values_into_fields()
     {
         var layer = Layer<ulong, ReLU<ulong>>.LoadUnsafe([1UL, 2UL, 3UL, 4UL, 5UL, 6UL], [7UL, 8UL]);
 

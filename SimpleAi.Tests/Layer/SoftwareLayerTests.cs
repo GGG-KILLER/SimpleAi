@@ -3,7 +3,7 @@ namespace SimpleAi.Tests.Layer;
 public class SoftwareLayerTests
 {
     [Fact]
-    public void Layer_RunInference_ExecutesCorrectlyOnSoftwareFallback()
+    public void LayerX2ERunInference_Executes_correctly_on_software_fallback()
     {
         var layer = Layer<int, ReLU<int>>.LoadUnsafe([
             1, 2,

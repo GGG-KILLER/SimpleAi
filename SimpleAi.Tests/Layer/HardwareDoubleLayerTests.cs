@@ -7,13 +7,13 @@ public class HardwareDoubleLayerTests
     public static TheoryData<Type> ExecutesCorrectlyOnDoubleVectorizationPathData() => [.. ActivationHelper.GetNonExponentiatingActivationTypes<double>()];
     [Theory(Skip = "Vector<double> is not hardware accelerated.", SkipUnless = nameof(SkipConditions.DoubleVectorsAreHardwareAccelerated), SkipType = typeof(SkipConditions))]
     [MemberData(nameof(ExecutesCorrectlyOnDoubleVectorizationPathData))]
-    public void Layer_RunInference_ExecutesCorrectlyOnDoubleVectorizationPath(Type activationFunction)
+    public void LayerX2ERunInference_Executes_correctly_on_double_vectorization_path(Type activationFunction)
     {
-        typeof(HardwareDoubleLayerTests).GetMethod(nameof(Layer_RunInference_ExecutesCorrectlyOnDoubleVectorizationPathCore), BindingFlags.Static | BindingFlags.NonPublic)!
+        typeof(HardwareDoubleLayerTests).GetMethod(nameof(Layer_RunInference_Executes_correctly_on_double_vectorization_pathCore), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(activationFunction)
             .Invoke(null, null);
     }
-    private static void Layer_RunInference_ExecutesCorrectlyOnDoubleVectorizationPathCore<T>() where T : IActivationFunction<double>
+    private static void Layer_RunInference_Executes_correctly_on_double_vectorization_pathCore<T>() where T : IActivationFunction<double>
     {
         var layer = Layer<double, T>.LoadUnsafe([
             1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0,  8.0,  9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 2.0,

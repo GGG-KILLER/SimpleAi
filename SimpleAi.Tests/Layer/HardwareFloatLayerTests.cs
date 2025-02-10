@@ -7,13 +7,13 @@ public class HardwareFloatLayerTests
     public static TheoryData<Type> ExecutesCorrectlyOnFloatVectorizationPathData() => [.. ActivationHelper.GetNonExponentiatingActivationTypes<float>()];
     [Theory(Skip = "Vector<float> is not hardware accelerated.", SkipUnless = nameof(SkipConditions.FloatVectorsAreHardwareAccelerated), SkipType = typeof(SkipConditions))]
     [MemberData(nameof(ExecutesCorrectlyOnFloatVectorizationPathData))]
-    public void Layer_RunInference_ExecutesCorrectlyOnFloatVectorizationPath(Type activationFunction)
+    public void LayerX2ERunInference_Executes_correctly_on_float_vectorization_path(Type activationFunction)
     {
-        typeof(HardwareFloatLayerTests).GetMethod(nameof(Layer_RunInference_ExecutesCorrectlyOnFloatVectorizationPathCore), BindingFlags.Static | BindingFlags.NonPublic)!
+        typeof(HardwareFloatLayerTests).GetMethod(nameof(Layer_RunInference_Executes_correctly_on_float_vectorization_pathCore), BindingFlags.Static | BindingFlags.NonPublic)!
             .MakeGenericMethod(activationFunction)
             .Invoke(null, null);
     }
-    private static void Layer_RunInference_ExecutesCorrectlyOnFloatVectorizationPathCore<T>()
+    private static void Layer_RunInference_Executes_correctly_on_float_vectorization_pathCore<T>()
         where T : IActivationFunction<float>
     {
         var layer = Layer<float, T>.LoadUnsafe([

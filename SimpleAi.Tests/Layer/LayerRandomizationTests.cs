@@ -3,7 +3,7 @@ namespace SimpleAi.Tests.Layer;
 public class LayerRandomizationTests
 {
     [Fact]
-    public void Layer_Randomize_ActuallyRandomizesWeightsAndBiases()
+    public void LayerX2ERandomize_Actually_randomizes_weights_and_biases()
     {
         var layer = new Layer<double, ReLU<double>>(2, 5);
 
@@ -19,7 +19,7 @@ public class LayerRandomizationTests
     }
 
     [Fact]
-    public void Layer_Randomize_ActuallyRandomizesWeightsAndBiasesWithIntegers()
+    public void LayerX2ERandomize_Actually_randomizes_weights_and_biases_with_integers()
     {
         var layer = new Layer<long, ReLU<long>>(2, 5);
 
