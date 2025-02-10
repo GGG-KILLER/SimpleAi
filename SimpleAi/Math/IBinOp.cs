@@ -17,6 +17,13 @@ internal readonly partial struct AddOp<T> : IBinOp<T>
     public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts + rights;
 }
 
+internal readonly struct SubOp<T> : IBinOp<T>
+    where T : ISubtractionOperators<T, T, T>
+{
+    public static T Execute(T left, T right) => left - right;
+    public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts - rights;
+}
+
 internal readonly struct MulOp<T> : IBinOp<T>
     where T : IMultiplyOperators<T, T, T>
 {

@@ -16,7 +16,7 @@ public class HardwareFloatLayerTests
     private static void Layer_RunInference_Executes_correctly_on_float_vectorization_pathCore<T>()
         where T : IActivationFunction<float>
     {
-        var layer = Layer<float, T>.LoadUnsafe([
+        var layer = Layer<float, T, MeanSquaredError<float>>.LoadUnsafe([
              1f,  2f,  3f,  4f,  5f,  6f,  7f,  8f,  9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f, 2f,
             17f, 18f, 19f, 20f, 21f, 22f, 23f, 24f, 25f, 26f, 27f, 28f, 29f, 30f, 31f, 32f, 2f,
             33f, 34f, 35f, 36f, 37f, 38f, 39f, 40f, 41f, 42f, 43f, 44f, 45f, 46f, 47f, 48f, 2f,

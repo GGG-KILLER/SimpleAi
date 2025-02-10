@@ -4,17 +4,33 @@ using System.Runtime.InteropServices;
 
 namespace SimpleAi;
 
-public sealed class NeuralNetwork<T, TActivation>
+public interface INeuralNetwork<T>
+{
+    int Inputs { get; }
+    int Outputs { get; }
+
+    ILayer<T> this[Index index] { get; }
+
+    void Randomize(T scale);
+    void RunInference(ReadOnlySpan<T> inputs, Span<T> output);
+
+    T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints);
+}
+
+public sealed class NeuralNetwork<T, TActivation, TCost> : INeuralNetwork<T>
     where T : unmanaged, INumber<T>
     where TActivation : IActivationFunction<T>
+    where TCost : ICostFunction<T>
 {
-    private readonly Layer<T, TActivation>[] _layers;
+    private readonly Layer<T, TActivation, TCost>[] _layers;
 
     public int Inputs { get; }
 
     public int Outputs { get; }
 
-    public ReadOnlySpan<Layer<T, TActivation>> Layers => _layers.AsSpan();
+    public ReadOnlySpan<Layer<T, TActivation, TCost>> Layers => _layers.AsSpan();
+
+    public ILayer<T> this[Index index] => _layers[index];
 
     public NeuralNetwork(int inputs, params ReadOnlySpan<int> layerSizes)
     {
@@ -26,7 +42,7 @@ public sealed class NeuralNetwork<T, TActivation>
 
         Inputs = inputs;
         Outputs = layerSizes[^1];
-        _layers = new Layer<T, TActivation>[layerSizes.Length];
+        _layers = new Layer<T, TActivation, TCost>[layerSizes.Length];
 
         for (var idx = 0; idx < layerSizes.Length; idx++)
         {
@@ -35,25 +51,25 @@ public sealed class NeuralNetwork<T, TActivation>
                 throw new ArgumentException("Layer sizes must be greater than zero.", nameof(layerSizes));
             }
 
-            _layers[idx] = new Layer<T, TActivation>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
+            _layers[idx] = new Layer<T, TActivation, TCost>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
         }
     }
 
-    private NeuralNetwork(Layer<T, TActivation>[] layers)
+    private NeuralNetwork(Layer<T, TActivation, TCost>[] layers)
     {
         _layers = layers;
         Inputs = layers[0].Inputs;
         Outputs = layers[^1].Size;
     }
 
-    public static NeuralNetwork<T, TActivation> UnsafeLoad(T[][] weights, T[][] biases)
+    public static NeuralNetwork<T, TActivation, TCost> UnsafeLoad(T[][] weights, T[][] biases)
     {
-        var layers = new Layer<T, TActivation>[weights.Length];
+        var layers = new Layer<T, TActivation, TCost>[weights.Length];
         for (var idx = 0; idx < weights.Length; idx++)
         {
-            layers[idx] = Layer<T, TActivation>.LoadUnsafe(weights[idx], biases[idx]);
+            layers[idx] = Layer<T, TActivation, TCost>.LoadUnsafe(weights[idx], biases[idx]);
         }
-        return new NeuralNetwork<T, TActivation>(layers);
+        return new NeuralNetwork<T, TActivation, TCost>(layers);
     }
 
     public void Randomize(T scale)
@@ -101,4 +117,8 @@ public sealed class NeuralNetwork<T, TActivation>
         // so we copy it to the final output.
         inBuffer[..Outputs].CopyTo(output);
     }
+
+    [SkipLocalsInit]
+    public T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints) =>
+        _layers[^1].AverageCost(trainingDataPoints);
 }

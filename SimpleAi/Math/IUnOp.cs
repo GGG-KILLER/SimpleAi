@@ -42,3 +42,10 @@ internal readonly struct ExpOp<T> : IUnOp<T>
         }
     }
 }
+
+internal readonly struct Pow2Op<T> : IUnOp<T>
+    where T : IMultiplyOperators<T, T, T>
+{
+    public static T Execute(T arg) => arg * arg;
+    public static Vector<T> Execute(Vector<T> args) => args * args;
+}

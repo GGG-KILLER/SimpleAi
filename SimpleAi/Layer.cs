@@ -1,13 +1,29 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SimpleAi.Math;
 
 namespace SimpleAi;
 
-public sealed class Layer<T, TActivation>
-    where T : INumber<T>
+public interface ILayer<T>
+{
+    int Inputs { get; }
+    int Size { get; }
+
+    // Init
+    void Randomize(T scale);
+
+    // Inference
+    void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
+
+    // Training
+    T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints);
+}
+
+public sealed class Layer<T, TActivation, TCost> : ILayer<T>
+    where T : unmanaged, INumber<T>
     where TActivation : IActivationFunction<T>
+    where TCost : ICostFunction<T>
 {
     private readonly T[] _weights;
     private readonly T[] _biases;
@@ -27,9 +43,9 @@ public sealed class Layer<T, TActivation>
         Size = size;
     }
 
-    public static Layer<T, TActivation> LoadUnsafe(T[] weights, T[] biases)
+    public static Layer<T, TActivation, TCost> LoadUnsafe(T[] weights, T[] biases)
     {
-        var layer = new Layer<T, TActivation>(weights.Length / biases.Length, biases.Length);
+        var layer = new Layer<T, TActivation, TCost>(weights.Length / biases.Length, biases.Length);
 
         weights.CopyTo(layer._weights.AsSpan());
         biases.CopyTo(layer._biases.AsSpan());
@@ -82,5 +98,24 @@ public sealed class Layer<T, TActivation>
 
         MathEx.Binary<T, AddOp<T>>(outputs, _biases, outputs);
         TActivation.Activate(outputs, outputs);
+    }
+
+    [SkipLocalsInit]
+    public T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints)
+    {
+        Span<T> results = Size <= (1024 / Marshal.SizeOf<T>())
+            ? stackalloc T[Size]
+            : GC.AllocateUninitializedArray<T>(Size);
+
+        T totalCost = T.AdditiveIdentity;
+        for (var idx = 0; idx < trainingDataPoints.Length; idx++)
+        {
+            var trainingDataPoint = trainingDataPoints.UnsafeIndex(idx);
+
+            RunInference(trainingDataPoint.Inputs.Span, results);
+
+            totalCost += TCost.Calculate(trainingDataPoint.ExpectedOutputs.Span, results);
+        }
+        return totalCost / T.CreateChecked(trainingDataPoints.Length);
     }
 }

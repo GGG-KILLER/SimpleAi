@@ -5,7 +5,7 @@ public class NeuralNetworkInferenceTests
     [Fact]
     public void NeuralNetworkX2ERunInference_Throws_exception_when_input_size_is_wrong()
     {
-        var network = new NeuralNetwork<float, ReLU<float>>(2, 2);
+        var network = new NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>(2, 2);
 
         Assert.Throws<ArgumentException>(() =>
             network.RunInference([], stackalloc float[2]));
@@ -18,7 +18,7 @@ public class NeuralNetworkInferenceTests
     [Fact]
     public void NeuralNetworkX2ERunInference_Throws_exception_when_output_size_is_wrong()
     {
-        var network = new NeuralNetwork<float, ReLU<float>>(2, 2);
+        var network = new NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>(2, 2);
 
         Assert.Throws<ArgumentException>(() =>
             network.RunInference([1, 1], []));
@@ -31,7 +31,7 @@ public class NeuralNetworkInferenceTests
     [Fact]
     public void NeuralNetworkX2ERunInference_Calls_layers_in_correct_order_with_correct_inputs_on_an_odd_number_of_layers()
     {
-        var network = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
+        var network = NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>.UnsafeLoad([
             [
                 1f, 2f,
                 3f, 4f,
@@ -72,7 +72,7 @@ public class NeuralNetworkInferenceTests
     [Fact]
     public void NeuralNetworkX2ERunInference_Calls_layers_in_correct_order_with_correct_inputs_on_an_even_number_of_layers()
     {
-        var network = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
+        var network = NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>.UnsafeLoad([
             [
                 1f, 2f,
                 3f, 4f,

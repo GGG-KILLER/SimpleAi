@@ -7,8 +7,8 @@ namespace SimpleAi.Benchmarks;
 [MemoryRandomization]
 public class LayerInferenceBenchmark
 {
-    private Layer<float, ReLU<float>>? _floatLayer;
-    private Layer<double, ReLU<double>>? _doubleLayer;
+    private Layer<float, ReLU<float>, MeanSquaredError<float>>? _floatLayer;
+    private Layer<double, ReLU<double>, MeanSquaredError<double>>? _doubleLayer;
     private float[]? _floatInputs;
     private double[]? _doubleInputs;
     private float[]? _floatOutputs;
@@ -23,9 +23,9 @@ public class LayerInferenceBenchmark
     [GlobalSetup]
     public void GlobalSetup()
     {
-        _floatLayer = new Layer<float, ReLU<float>>(Inputs, Neurons);
+        _floatLayer = new Layer<float, ReLU<float>, MeanSquaredError<float>>(Inputs, Neurons);
         _floatLayer.Randomize(Random.Shared.Next(1, 101));
-        _doubleLayer = new Layer<double, ReLU<double>>(Inputs, Neurons);
+        _doubleLayer = new Layer<double, ReLU<double>, MeanSquaredError<double>>(Inputs, Neurons);
         _doubleLayer.Randomize(Random.Shared.Next(1, 101));
 
         _floatInputs = new float[Inputs];

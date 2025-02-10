@@ -5,7 +5,7 @@ public class LayerLoadingTests
     [Fact]
     public void LayerX2ELoadUnsafe_Correctly_copies_values_into_fields()
     {
-        var layer = Layer<ulong, ReLU<ulong>>.LoadUnsafe([1UL, 2UL, 3UL, 4UL, 5UL, 6UL], [7UL, 8UL]);
+        var layer = Layer<ulong, ReLU<ulong>, MeanSquaredError<ulong>>.LoadUnsafe([1UL, 2UL, 3UL, 4UL, 5UL, 6UL], [7UL, 8UL]);
 
         Assert.Equal(3, layer.Inputs);
         Assert.Equal(2, layer.Size);

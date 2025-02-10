@@ -5,7 +5,7 @@ public class LayerRandomizationTests
     [Fact]
     public void LayerX2ERandomize_Actually_randomizes_weights_and_biases()
     {
-        var layer = new Layer<double, ReLU<double>>(2, 5);
+        var layer = new Layer<double, ReLU<double>, MeanSquaredError<double>>(2, 5);
 
         layer.Randomize(1.5);
         layer.Randomize(2.5);
@@ -21,7 +21,7 @@ public class LayerRandomizationTests
     [Fact]
     public void LayerX2ERandomize_Actually_randomizes_weights_and_biases_with_integers()
     {
-        var layer = new Layer<long, ReLU<long>>(2, 5);
+        var layer = new Layer<long, ReLU<long>, MeanSquaredError<long>>(2, 5);
 
         layer.Randomize(2);
         layer.Randomize(3);

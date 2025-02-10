@@ -5,7 +5,7 @@ public class NeuralNetworkRandomizationTests
     [Fact]
     public void NeuralNetworkX2ERandomize_Properly_randomizes_layers()
     {
-        var network = new NeuralNetwork<long, ReLU<long>>(2, 3);
+        var network = new NeuralNetwork<long, ReLU<long>, MeanSquaredError<long>>(2, 3);
 
         network.Randomize(5);
         network.Randomize(10);
