@@ -4,14 +4,13 @@ using SimpleAi.Math;
 namespace SimpleAi;
 
 public interface IActivationFunction<T>
-    where T : INumber<T>
 {
     static abstract void Activate(ReadOnlySpan<T> inputs, Span<T> outputs);
     static abstract void Derivative(ReadOnlySpan<T> values, Span<T> outputs);
 }
 
 public readonly struct Sigmoid<T> : IActivationFunction<T>
-    where T : INumber<T>, IExponentialFunctions<T>
+    where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
@@ -44,7 +43,7 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
 }
 
 public readonly struct TanH<T> : IActivationFunction<T>
-    where T : INumber<T>, IExponentialFunctions<T>
+    where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
@@ -81,7 +80,7 @@ public readonly struct TanH<T> : IActivationFunction<T>
 }
 
 public readonly struct ReLU<T> : IActivationFunction<T>
-    where T : INumber<T>
+    where T : INumber<T> // T.Zero, T.Max
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
@@ -103,7 +102,11 @@ public readonly struct ReLU<T> : IActivationFunction<T>
 }
 
 public readonly struct SoftMax<T> : IActivationFunction<T>
-    where T : INumber<T>, IExponentialFunctions<T>
+    where T : IExponentialFunctions<T>, // T.Exp
+              IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
+              IDivisionOperators<T, T, T>, // DivOp<T>, LastDerivativeStep (operator /)
+              ISubtractionOperators<T, T, T>, // LastDerivativeStep (operator -)
+              IMultiplyOperators<T, T, T> // LastDerivativeStep (operator *)
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
