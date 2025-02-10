@@ -27,7 +27,13 @@ jobs:
     - name: Build
       run: dotnet build --no-restore
     - name: Test
-      run: dotnet test --no-build --verbosity normal -- --xunit-info --output Detailed --coverage --coverage-output-format xml --coverage-output coverage.xml
+      run: dotnet run --project SimpleAi.Tests -- --xunit-info --output Detailed --coverage --coverage-output-format xml --coverage-output coverage.xml --report-junit --report-junit-filename report.xml
+    - name: Test Summary
+      uses: test-summary/action@v2
+      with:
+        paths: SimpleAi.Tests/bin/Debug/net9.0/TestResults/report.xml
+        show: all
+      if: always()
     - name: Generate coverage reports
       uses: danielpalme/ReportGenerator-GitHub-Action@5.4.4
       with:
