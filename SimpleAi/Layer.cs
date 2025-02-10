@@ -1,12 +1,13 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SimpleAi.Math;
 
 namespace SimpleAi;
 
-public sealed class Layer<T>
+public sealed class Layer<T, TActivation>
     where T : INumber<T>
+    where TActivation : IActivationFunction<T>
 {
     private readonly T[] _weights;
     private readonly T[] _biases;
@@ -26,9 +27,9 @@ public sealed class Layer<T>
         Size = size;
     }
 
-    public static Layer<T> LoadUnsafe(T[] weights, T[] biases)
+    public static Layer<T, TActivation> LoadUnsafe(T[] weights, T[] biases)
     {
-        var layer = new Layer<T>(weights.Length / biases.Length, biases.Length);
+        var layer = new Layer<T, TActivation>(weights.Length / biases.Length, biases.Length);
 
         weights.CopyTo(layer._weights.AsSpan());
         biases.CopyTo(layer._biases.AsSpan());
@@ -79,6 +80,7 @@ public sealed class Layer<T>
             output = ref Unsafe.Add(ref output, 1);
         }
 
-        MathEx.Binary<T, BUPipeline<T, AddOp<T>, ReLUOp<T>>>(outputs, _biases, outputs);
+        MathEx.Binary<T, AddOp<T>>(outputs, _biases, outputs);
+        TActivation.Activate(outputs, outputs);
     }
 }

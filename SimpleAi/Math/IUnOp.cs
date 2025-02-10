@@ -10,9 +10,35 @@ internal interface IUnOp<T>
     static abstract Vector<T> Execute(Vector<T> args);
 }
 
-internal readonly struct ReLUOp<T> : IUnOp<T>
-    where T : INumber<T>
+internal readonly struct Identity<T> : IUnOp<T>
 {
-    public static T Execute(T arg) => T.Max(T.Zero, arg);
-    public static Vector<T> Execute(Vector<T> args) => Vector.Max(Vector<T>.Zero, args);
+    public static T Execute(T arg) => arg;
+    public static Vector<T> Execute(Vector<T> args) => args;
+}
+
+internal readonly struct ExpOp<T> : IUnOp<T>
+    where T : IExponentialFunctions<T>
+{
+    public static T Execute(T arg) => T.Exp(arg);
+
+    public static Vector<T> Execute(Vector<T> args)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            return Vector.Exp(args.As<T, float>()).As<float, T>();
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            return Vector.Exp(args.As<T, double>()).As<double, T>();
+        }
+        else
+        {
+            var output = Vector<T>.Zero;
+            for (var idx = 0; idx < Vector<T>.Count; idx++)
+            {
+                output = output.WithElement(idx, T.Exp(args[idx]));
+            }
+            return output;
+        }
+    }
 }

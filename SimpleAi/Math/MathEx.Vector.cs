@@ -65,6 +65,56 @@ internal static partial class MathEx
     }
 
     [SkipLocalsInit]
+    public static void Binary<T, TOp>(T left, ReadOnlySpan<T> rights, Span<T> outputs)
+        where TOp : struct, IBinOp<T>
+    {
+        Debug.Assert(rights.Length <= outputs.Length, "Output must have enough space to store results.");
+        Debug.Assert(InputOutputSpanNonOverlapping(rights, outputs));
+
+        var idx = 0;
+
+        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && rights.Length > Vector<T>.Count)
+        {
+            var leftVec = Vector.Create(left);
+            for (; idx < rights.Length - Vector<T>.Count; idx += Vector<T>.Count)
+            {
+                var right = Vector.LoadUnsafe(ref rights.UnsafeIndex(idx));
+                TOp.Execute(leftVec, right).StoreUnsafe(ref outputs.UnsafeIndex(idx));
+            }
+        }
+
+        for (; idx < rights.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = TOp.Execute(left, rights.UnsafeIndex(idx));
+        }
+    }
+
+    [SkipLocalsInit]
+    public static void Binary<T, TOp>(ReadOnlySpan<T> lefts, T right, Span<T> outputs)
+        where TOp : struct, IBinOp<T>
+    {
+        Debug.Assert(lefts.Length <= outputs.Length, "Output must have enough space to store results.");
+        Debug.Assert(InputOutputSpanNonOverlapping(lefts, outputs));
+
+        var idx = 0;
+
+        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && lefts.Length > Vector<T>.Count)
+        {
+            var rightVec = Vector.Create(right);
+            for (; idx < lefts.Length - Vector<T>.Count; idx += Vector<T>.Count)
+            {
+                var left = Vector.LoadUnsafe(ref lefts.UnsafeIndex(idx));
+                TOp.Execute(left, rightVec).StoreUnsafe(ref outputs.UnsafeIndex(idx));
+            }
+        }
+
+        for (; idx < lefts.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = TOp.Execute(lefts.UnsafeIndex(idx), right);
+        }
+    }
+
+    [SkipLocalsInit]
     public static void Ternary<T, TOp>(
         ReadOnlySpan<T> lefts,
         ReadOnlySpan<T> middles,

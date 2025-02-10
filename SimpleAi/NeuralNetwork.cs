@@ -4,16 +4,17 @@ using System.Runtime.InteropServices;
 
 namespace SimpleAi;
 
-public sealed class NeuralNetwork<T>
+public sealed class NeuralNetwork<T, TActivation>
     where T : unmanaged, INumber<T>
+    where TActivation : IActivationFunction<T>
 {
-    private readonly Layer<T>[] _layers;
+    private readonly Layer<T, TActivation>[] _layers;
 
     public int Inputs { get; }
 
     public int Outputs { get; }
 
-    public ReadOnlySpan<Layer<T>> Layers => _layers.AsSpan();
+    public ReadOnlySpan<Layer<T, TActivation>> Layers => _layers.AsSpan();
 
     public NeuralNetwork(int inputs, params ReadOnlySpan<int> layerSizes)
     {
@@ -25,7 +26,7 @@ public sealed class NeuralNetwork<T>
 
         Inputs = inputs;
         Outputs = layerSizes[^1];
-        _layers = new Layer<T>[layerSizes.Length];
+        _layers = new Layer<T, TActivation>[layerSizes.Length];
 
         for (var idx = 0; idx < layerSizes.Length; idx++)
         {
@@ -34,25 +35,25 @@ public sealed class NeuralNetwork<T>
                 throw new ArgumentException("Layer sizes must be greater than zero.", nameof(layerSizes));
             }
 
-            _layers[idx] = new Layer<T>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
+            _layers[idx] = new Layer<T, TActivation>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
         }
     }
 
-    private NeuralNetwork(Layer<T>[] layers)
+    private NeuralNetwork(Layer<T, TActivation>[] layers)
     {
         _layers = layers;
         Inputs = layers[0].Inputs;
         Outputs = layers[^1].Size;
     }
 
-    public static NeuralNetwork<T> UnsafeLoad(T[][] weights, T[][] biases)
+    public static NeuralNetwork<T, TActivation> UnsafeLoad(T[][] weights, T[][] biases)
     {
-        var layers = new Layer<T>[weights.Length];
+        var layers = new Layer<T, TActivation>[weights.Length];
         for (var idx = 0; idx < weights.Length; idx++)
         {
-            layers[idx] = Layer<T>.LoadUnsafe(weights[idx], biases[idx]);
+            layers[idx] = Layer<T, TActivation>.LoadUnsafe(weights[idx], biases[idx]);
         }
-        return new NeuralNetwork<T>(layers);
+        return new NeuralNetwork<T, TActivation>(layers);
     }
 
     public void Randomize(T scale)

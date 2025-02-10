@@ -18,10 +18,17 @@ internal readonly partial struct AddOp<T> : IBinOp<T>
 }
 
 internal readonly struct MulOp<T> : IBinOp<T>
-    where T : IMultiplicativeIdentity<T, T>, IMultiplyOperators<T, T, T>
+    where T : IMultiplyOperators<T, T, T>
 {
     public static T Execute(T left, T right) => left * right;
     public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts * rights;
+}
+
+internal readonly struct DivOp<T> : IBinOp<T>
+    where T : IDivisionOperators<T, T, T>
+{
+    public static T Execute(T left, T right) => left / right;
+    public static Vector<T> Execute(Vector<T> lefts, Vector<T> rights) => lefts / rights;
 }
 
 internal readonly struct BUPipeline<T, TBin, TUn> : IBinOp<T>
