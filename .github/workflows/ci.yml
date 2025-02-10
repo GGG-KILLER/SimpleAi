@@ -20,9 +20,25 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
+    - name: Setup ReportGenerator
+      run: dotnet tool install -g dotnet-reportgenerator-globaltool
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore
     - name: Test
-      run: dotnet run --no-build --project SimpleAi.Tests -- --xunit-info --output Detailed
+      run: dotnet test --no-build --verbosity normal -- --xunit-info --output Detailed --coverage --coverage-output-format xml --coverage-output coverage.xml
+    - name: Generate coverage reports
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.4.4
+      with:
+        reports: SimpleAi.Tests/bin/Debug/net9.0/TestResults/coverage.xml
+        targetdir: coveragereport
+        reporttypes: Html_Dark;MarkdownSummaryGithub
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: CoverageReport
+        path: coveragereport
+    - name: Publish coverage in build summary
+      run: cat coveragereport/SummaryGithub.md >> $GITHUB_STEP_SUMMARY # Adjust path and filename if necessary
+      shell: bash
