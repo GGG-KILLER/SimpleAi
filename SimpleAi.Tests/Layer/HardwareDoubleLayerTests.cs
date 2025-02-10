@@ -4,7 +4,7 @@ namespace SimpleAi.Tests.Layer;
 
 public class HardwareDoubleLayerTests
 {
-    public static TheoryData<Type> ExecutesCorrectlyOnDoubleVectorizationPathData() => [.. ActivationHelper.GetNonExponentiatingActivationTypes<double>()];
+    public static TheoryData<Type> ExecutesCorrectlyOnDoubleVectorizationPathData() => [.. ActivationHelper.GetActivationTypes<double>()];
     [Theory(Skip = "Vector<double> is not hardware accelerated.", SkipUnless = nameof(SkipConditions.DoubleVectorsAreHardwareAccelerated), SkipType = typeof(SkipConditions))]
     [MemberData(nameof(ExecutesCorrectlyOnDoubleVectorizationPathData))]
     public void LayerX2ERunInference_Executes_correctly_on_double_vectorization_path(Type activationFunction)

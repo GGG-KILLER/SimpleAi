@@ -4,7 +4,7 @@ namespace SimpleAi.Tests.Layer;
 
 public class HardwareFloatLayerTests
 {
-    public static TheoryData<Type> ExecutesCorrectlyOnFloatVectorizationPathData() => [.. ActivationHelper.GetNonExponentiatingActivationTypes<float>()];
+    public static TheoryData<Type> ExecutesCorrectlyOnFloatVectorizationPathData() => [.. ActivationHelper.GetActivationTypes<float>()];
     [Theory(Skip = "Vector<float> is not hardware accelerated.", SkipUnless = nameof(SkipConditions.FloatVectorsAreHardwareAccelerated), SkipType = typeof(SkipConditions))]
     [MemberData(nameof(ExecutesCorrectlyOnFloatVectorizationPathData))]
     public void LayerX2ERunInference_Executes_correctly_on_float_vectorization_path(Type activationFunction)
