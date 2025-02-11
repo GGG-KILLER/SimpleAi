@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SimpleAi.Math;
@@ -11,7 +11,7 @@ public interface ILayer<T>
     int Size { get; }
 
     // Init
-    void Randomize(T scale);
+    void RandomizeWeights(T mean, T stdDev);
 
     // Inference
     void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
@@ -53,19 +53,20 @@ public sealed class Layer<T, TActivation, TCost> : ILayer<T>
         return layer;
     }
 
-    public void Randomize(T scale)
+    public void RandomizeWeights(T mean, T stdDev)
     {
-        // TODO: Use a normal distribution RNG
-        var scaleConv = double.CreateSaturating(scale);
-
         for (var nodeIdx = 0; nodeIdx < _weights.Length; nodeIdx++)
         {
-            _weights[nodeIdx] = T.CreateSaturating(Random.Shared.NextDouble() * scaleConv);
+            _weights[nodeIdx] = randomBetweenNormalDistribution(Random.Shared, mean, stdDev);
         }
 
-        for (var nodeIdx = 0; nodeIdx < _biases.Length; nodeIdx++)
+        static T randomBetweenNormalDistribution(Random random, T mean, T stdDev)
         {
-            _biases[nodeIdx] = T.CreateSaturating(Random.Shared.NextDouble() * scaleConv);
+            var x1 = 1 - random.NextDouble();
+            var x2 = 1 - random.NextDouble();
+
+            double y1 = double.Sqrt(-2.0 * double.Log(x1)) * double.Cos(2.0 * double.Pi * x2);
+            return T.CreateSaturating(y1 * double.CreateSaturating(stdDev) + double.CreateSaturating(mean));
         }
     }
 

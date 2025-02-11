@@ -24,9 +24,9 @@ public class LayerInferenceBenchmark
     public void GlobalSetup()
     {
         _floatLayer = new Layer<float, ReLU<float>, MeanSquaredError<float>>(Inputs, Neurons);
-        _floatLayer.Randomize(Random.Shared.Next(1, 101));
+        _floatLayer.RandomizeWeights(0, 1);
         _doubleLayer = new Layer<double, ReLU<double>, MeanSquaredError<double>>(Inputs, Neurons);
-        _doubleLayer.Randomize(Random.Shared.Next(1, 101));
+        _doubleLayer.RandomizeWeights(0, 1);
 
         _floatInputs = new float[Inputs];
         for (var idx = 0; idx < _floatInputs.Length; idx++)

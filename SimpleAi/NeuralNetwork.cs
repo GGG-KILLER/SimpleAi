@@ -11,7 +11,7 @@ public interface INeuralNetwork<T>
 
     ILayer<T> this[Index index] { get; }
 
-    void Randomize(T scale);
+    void RandomizeWeights(T mean, T stdDev);
     void RunInference(ReadOnlySpan<T> inputs, Span<T> output);
 
     T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints);
@@ -72,11 +72,11 @@ public sealed class NeuralNetwork<T, TActivation, TCost> : INeuralNetwork<T>
         return new NeuralNetwork<T, TActivation, TCost>(layers);
     }
 
-    public void Randomize(T scale)
+    public void RandomizeWeights(T mean, T stdDev)
     {
         for (int idx = 0; idx < _layers.Length; idx++)
         {
-            _layers.UnsafeIndex(idx).Randomize(scale);
+            _layers.UnsafeIndex(idx).RandomizeWeights(mean, stdDev);
         }
     }
 

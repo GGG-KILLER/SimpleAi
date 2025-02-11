@@ -3,34 +3,26 @@ namespace SimpleAi.Tests.Layer;
 public class LayerRandomizationTests
 {
     [Fact]
-    public void LayerX2ERandomize_Actually_randomizes_weights_and_biases()
+    public void LayerX2ERandomizeWeights_Properly_randomizes_weights()
     {
         var layer = new Layer<double, ReLU<double>, MeanSquaredError<double>>(2, 5);
 
-        layer.Randomize(1.5);
-        layer.Randomize(2.5);
-        layer.Randomize(5.0);
+        layer.RandomizeWeights(25, 5);
 
         var weights = LayerAccessors.GetWeights(layer);
-        var biases = LayerAccessors.GetBiases(layer);
 
-        Assert.Contains(weights, x => x != 0.0);
-        Assert.Contains(biases, x => x != 0.0);
+        Assert.Contains(weights, x => 20 <= x && x <= 30);
     }
 
     [Fact]
-    public void LayerX2ERandomize_Actually_randomizes_weights_and_biases_with_integers()
+    public void LayerX2ERandomizeWeights_Properly_randomizes_weights_with_integers()
     {
         var layer = new Layer<long, ReLU<long>, MeanSquaredError<long>>(2, 5);
 
-        layer.Randomize(2);
-        layer.Randomize(3);
-        layer.Randomize(5);
+        layer.RandomizeWeights(25, 5);
 
         var weights = LayerAccessors.GetWeights(layer);
-        var biases = LayerAccessors.GetBiases(layer);
 
-        Assert.Contains(weights, x => x != 0.0);
-        Assert.Contains(biases, x => x != 0.0);
+        Assert.Contains(weights, x => 20 <= x && x <= 30);
     }
 }
