@@ -5,7 +5,7 @@ public class NeuralNetworkLoadingTests
     [Fact]
     public void NeuralNetworkX2EUnsafeLoad_Correctly_sets_inputs_and_outputs_as_well_as_loads_layers()
     {
-        var network1 = NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>.UnsafeLoad([
+        var network1 = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
             [
                 1f, 2f,
                 3f, 4f,
@@ -24,7 +24,7 @@ public class NeuralNetworkLoadingTests
             [0f, 0f],
         ]);
 
-        var network2 = NeuralNetwork<float, ReLU<float>, MeanSquaredError<float>>.UnsafeLoad([
+        var network2 = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
             [
                 1f, 2f,
                 3f, 4f,

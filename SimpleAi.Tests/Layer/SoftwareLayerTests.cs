@@ -5,7 +5,7 @@ public class SoftwareLayerTests
     [Fact]
     public void LayerX2ERunInference_Executes_correctly_on_software_fallback()
     {
-        var layer = Layer<int, ReLU<int>, MeanSquaredError<int>>.LoadUnsafe([
+        var layer = Layer<int, ReLU<int>>.LoadUnsafe([
             1, 2,
             3, 4,
             5, 6,

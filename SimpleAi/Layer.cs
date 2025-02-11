@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SimpleAi.Math;
@@ -17,13 +17,16 @@ public interface ILayer<T>
     void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
 
     // Training
-    T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints);
+    void CalculateCostGradients(
+        TrainingSession<T> trainingSession,
+        AverageCostFunc<T> getAverageCost,
+        T originalCost);
+    void ApplyCostGradients(TrainingSession<T> trainingSession, T learnRate);
 }
 
-public sealed class Layer<T, TActivation, TCost> : ILayer<T>
+public sealed class Layer<T, TActivation> : ILayer<T>
     where T : unmanaged, INumber<T>
     where TActivation : IActivationFunction<T>
-    where TCost : ICostFunction<T>
 {
     private readonly T[] _weights;
     private readonly T[] _biases;
@@ -36,16 +39,16 @@ public sealed class Layer<T, TActivation, TCost> : ILayer<T>
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
 
-        _weights = new T[size * inputCount];
-        _biases = new T[size];
+        _weights = GC.AllocateUninitializedArray<T>(size * inputCount);
+        _biases = GC.AllocateUninitializedArray<T>(size);
 
         Inputs = inputCount;
         Size = size;
     }
 
-    public static Layer<T, TActivation, TCost> LoadUnsafe(T[] weights, T[] biases)
+    public static Layer<T, TActivation> LoadUnsafe(T[] weights, T[] biases)
     {
-        var layer = new Layer<T, TActivation, TCost>(weights.Length / biases.Length, biases.Length);
+        var layer = new Layer<T, TActivation>(weights.Length / biases.Length, biases.Length);
 
         weights.CopyTo(layer._weights.AsSpan());
         biases.CopyTo(layer._biases.AsSpan());
@@ -102,21 +105,62 @@ public sealed class Layer<T, TActivation, TCost> : ILayer<T>
     }
 
     [SkipLocalsInit]
-    public T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints)
+    public void CalculateCostGradients(
+        TrainingSession<T> trainingSession,
+        AverageCostFunc<T> getAverageCost,
+        T originalCost)
     {
-        Span<T> results = Size <= (1024 / Marshal.SizeOf<T>())
-            ? stackalloc T[Size]
-            : GC.AllocateUninitializedArray<T>(Size);
+        var layerData = trainingSession[this];
+        var weightGradientCosts = layerData.WeightGradientCosts.Span;
+        var biasGradientCosts = layerData.BiasGradientCosts.Span;
 
-        T totalCost = T.AdditiveIdentity;
-        for (var idx = 0; idx < trainingDataPoints.Length; idx++)
+        T delta;
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(double) || typeof(T) == typeof(float))
+            delta = T.CreateChecked(0.0001);
+        else
+            delta = T.CreateChecked(1);
+
+        ref T weightsStart = ref _weights.Ref();
+        ref T weight = ref weightsStart;
+        ref T weightsEnd = ref Unsafe.Add(ref weightsStart, _weights.Length);
+        while (Unsafe.IsAddressLessThan(ref weight, ref weightsEnd))
         {
-            var trainingDataPoint = trainingDataPoints.UnsafeIndex(idx);
+            weight += delta;
+            var deltaCost = getAverageCost(trainingSession) - originalCost;
+            weight -= delta;
+            weightGradientCosts.UnsafeIndex((int)Unsafe.ByteOffset(ref weightsStart, ref weight) / Unsafe.SizeOf<T>()) = deltaCost / delta;
 
-            RunInference(trainingDataPoint.Inputs.Span, results);
-
-            totalCost += TCost.Calculate(trainingDataPoint.ExpectedOutputs.Span, results);
+            weight = ref Unsafe.Add(ref weight, 1);
         }
-        return totalCost / T.CreateChecked(trainingDataPoints.Length);
+
+        ref T biasesStart = ref _biases.Ref();
+        ref T bias = ref biasesStart;
+        ref T biasesEnd = ref Unsafe.Add(ref biasesStart, _biases.Length);
+        while (Unsafe.IsAddressLessThan(ref bias, ref biasesEnd))
+        {
+            bias += delta;
+            var deltaCost = getAverageCost(trainingSession) - originalCost;
+            bias -= delta;
+            biasGradientCosts.UnsafeIndex((int)Unsafe.ByteOffset(ref biasesStart, ref bias) / Unsafe.SizeOf<T>()) = deltaCost / delta;
+
+            bias = ref Unsafe.Add(ref bias, 1);
+        }
+    }
+
+    [SkipLocalsInit]
+    public void ApplyCostGradients(TrainingSession<T> trainingSession, T learnRate)
+    {
+        var layerData = trainingSession[this];
+        var weightGradientCosts = layerData.WeightGradientCosts.Span;
+        var biasGradientCosts = layerData.BiasGradientCosts.Span;
+
+        // weights = weightGradientCosts * learnRate
+        MathEx.Binary<T, MulOp<T>>(weightGradientCosts, learnRate, _weights);
+        weightGradientCosts.Clear();
+
+        // biases -= biasGradientCosts * learnRate
+        MathEx.Binary<T, MulOp<T>>(biasGradientCosts, learnRate, biasGradientCosts);
+        MathEx.Binary<T, SubOp<T>>(_biases, biasGradientCosts, _biases);
+        biasGradientCosts.Clear();
     }
 }
