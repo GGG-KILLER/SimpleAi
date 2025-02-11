@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleAi.Benchmarks", "Simp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleAi.Tests", "SimpleAi.Tests\SimpleAi.Tests.csproj", "{75489255-EBA2-4FF1-9275-944D4EA0175F}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleAi.Console", "SimpleAi.Console\SimpleAi.Console.csproj", "{A1C00A6B-0740-47A3-8F35-9AA2B146C233}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,6 +29,10 @@ Global
 		{75489255-EBA2-4FF1-9275-944D4EA0175F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{75489255-EBA2-4FF1-9275-944D4EA0175F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{75489255-EBA2-4FF1-9275-944D4EA0175F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1C00A6B-0740-47A3-8F35-9AA2B146C233}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1C00A6B-0740-47A3-8F35-9AA2B146C233}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1C00A6B-0740-47A3-8F35-9AA2B146C233}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1C00A6B-0740-47A3-8F35-9AA2B146C233}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

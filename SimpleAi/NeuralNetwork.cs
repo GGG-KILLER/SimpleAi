@@ -1,6 +1,5 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace SimpleAi;
 
@@ -17,7 +16,9 @@ public interface INeuralNetwork<T>
     // Inference
     void RunInference(InferenceSession<T> inferenceSession, ReadOnlySpan<T> inputs, Span<T> output);
 
-    T AverageCost(ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints);
+    // Training
+    T AverageCost(TrainingSession<T> trainingSession);
+    void Train(TrainingSession<T> trainingSession, T learnRate);
 }
 
 public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
@@ -138,4 +139,29 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
         // so we copy it to the final output.
         return inferenceSession.Input[..Outputs];
     }
+
+    public void Train(TrainingSession<T> trainingSession, T learnRate)
+    {
+        AverageCostFunc<T> costFunction = AverageCost;
+        var originalCost = costFunction(trainingSession);
+
+        ref var layer = ref _layers.Ref();
+        ref var layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
+        while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
+        {
+            layer.CalculateCostGradients(trainingSession, costFunction, originalCost);
+
+            layer = ref Unsafe.Add(ref layer, 1)!;
+        }
+
+        layer = ref _layers.Ref()!;
+        while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
+        {
+            layer.ApplyCostGradients(trainingSession, learnRate);
+
+            layer = ref Unsafe.Add(ref layer, 1)!;
+        }
+    }
 }
+
+public delegate T AverageCostFunc<T>(TrainingSession<T> trainingSession);
