@@ -6,8 +6,11 @@ namespace SimpleAi;
 public interface INeuralNetwork<T>
 {
     int Inputs { get; }
+
     int Outputs { get; }
+
     int LayerCount { get; }
+
     ILayer<T> this[Index index] { get; }
 
     // Initialize
@@ -18,12 +21,12 @@ public interface INeuralNetwork<T>
 
     // Training
     T AverageCost(TrainingSession<T> trainingSession);
+
     void Train(TrainingSession<T> trainingSession, T learnRate);
 }
 
 public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
-    where T : unmanaged, INumber<T>
-    where TActivation : IActivationFunction<T>
+    where T : unmanaged, INumber<T> where TActivation : IActivationFunction<T>
 {
     private readonly Layer<T, TActivation>[] _layers;
 
@@ -35,7 +38,6 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
 
     public ReadOnlySpan<Layer<T, TActivation>> Layers => _layers.AsSpan();
 
-
     public ILayer<T> this[Index index] => _layers[index];
 
     public NeuralNetwork(int inputs, params ReadOnlySpan<int> layerSizes)
@@ -46,7 +48,7 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
             throw new ArgumentException("At least one layer is required.", nameof(layerSizes));
         }
 
-        Inputs = inputs;
+        Inputs  = inputs;
         Outputs = layerSizes[^1];
         _layers = new Layer<T, TActivation>[layerSizes.Length];
 
@@ -64,7 +66,7 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
     private NeuralNetwork(Layer<T, TActivation>[] layers)
     {
         _layers = layers;
-        Inputs = layers[0].Inputs;
+        Inputs  = layers[0].Inputs;
         Outputs = layers[^1].Size;
     }
 
@@ -105,12 +107,9 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
     [SkipLocalsInit]
     public T AverageCost(TrainingSession<T> trainingSession)
     {
-        T totalCost = T.AdditiveIdentity;
+        T   totalCost          = T.AdditiveIdentity;
         var trainingDataPoints = trainingSession.TrainingDataPoints;
-        var inferenceSession = trainingSession.InferenceSession;
-
-        ref var layersStart = ref _layers.Ref();
-        ref var layersEnd = ref Unsafe.Add(ref layersStart, _layers.Length);
+        var inferenceSession   = trainingSession.InferenceSession;
 
         foreach (var point in trainingDataPoints)
         {
@@ -125,7 +124,7 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
     {
         inputs.CopyTo(inferenceSession.Input);
 
-        ref var layer = ref _layers.Ref();
+        ref var layer     = ref _layers.Ref();
         ref var layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
         while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
         {
@@ -143,9 +142,9 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
     public void Train(TrainingSession<T> trainingSession, T learnRate)
     {
         AverageCostFunc<T> costFunction = AverageCost;
-        var originalCost = costFunction(trainingSession);
+        var                originalCost = costFunction(trainingSession);
 
-        ref var layer = ref _layers.Ref();
+        ref var layer     = ref _layers.Ref();
         ref var layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
         while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
         {

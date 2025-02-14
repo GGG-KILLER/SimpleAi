@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SimpleAi.Math;
 
@@ -6,14 +7,18 @@ namespace SimpleAi;
 public interface IActivationFunction<T>
 {
     static abstract void Activate(ReadOnlySpan<T> inputs, Span<T> outputs);
+
     static abstract void Derivative(ReadOnlySpan<T> values, Span<T> outputs);
 }
 
 public readonly struct Sigmoid<T> : IActivationFunction<T>
     where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
+    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+
+    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
     private readonly struct ActivationOp : IUnOp<T>
     {
@@ -45,8 +50,11 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
 public readonly struct TanH<T> : IActivationFunction<T>
     where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
+    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+
+    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
     private readonly struct ActivationOp : IUnOp<T>
     {
@@ -79,11 +87,14 @@ public readonly struct TanH<T> : IActivationFunction<T>
     }
 }
 
-public readonly struct ReLU<T> : IActivationFunction<T>
-    where T : INumber<T> // T.Zero, T.Max
+[SuppressMessage("ReSharper", "InconsistentNaming", Justification = "Name of algorithm.")]
+public readonly struct ReLU<T> : IActivationFunction<T> where T : INumber<T> // T.Zero, T.Max
 {
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, ActivationOp>(inputs, outputs);
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs) => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
+    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+
+    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
+        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
     private readonly struct ActivationOp : IUnOp<T>
     {
@@ -96,17 +107,17 @@ public readonly struct ReLU<T> : IActivationFunction<T>
     {
         public static T Execute(T value) => value > T.Zero ? T.One : T.Zero;
 
-        public static Vector<T> Execute(Vector<T> values) =>
-            Vector.ConditionalSelect(Vector.GreaterThan(values, Vector<T>.Zero), Vector<T>.One, Vector<T>.Zero);
+        public static Vector<T> Execute(Vector<T> values)
+            => Vector.ConditionalSelect(Vector.GreaterThan(values, Vector<T>.Zero), Vector<T>.One, Vector<T>.Zero);
     }
 }
 
 public readonly struct SoftMax<T> : IActivationFunction<T>
-    where T : IExponentialFunctions<T>, // T.Exp
-              IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
-              IDivisionOperators<T, T, T>, // DivOp<T>, LastDerivativeStep (operator /)
-              ISubtractionOperators<T, T, T>, // LastDerivativeStep (operator -)
-              IMultiplyOperators<T, T, T> // LastDerivativeStep (operator *)
+    where T : IExponentialFunctions<T>,                   // T.Exp
+    IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
+    IDivisionOperators<T, T, T>,                          // DivOp<T>, LastDerivativeStep (operator /)
+    ISubtractionOperators<T, T, T>,                       // LastDerivativeStep (operator -)
+    IMultiplyOperators<T, T, T>                           // LastDerivativeStep (operator *)
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
@@ -125,6 +136,8 @@ public readonly struct SoftMax<T> : IActivationFunction<T>
     private readonly struct LastDerivativeStep : IBinOp<T>
     {
         public static T Execute(T exp, T expSum) => (exp * expSum - exp * exp) / (expSum * expSum);
-        public static Vector<T> Execute(Vector<T> exp, Vector<T> expSum) => (exp * expSum - exp * exp) / (expSum * expSum);
+
+        public static Vector<T> Execute(Vector<T> exp, Vector<T> expSum)
+            => (exp * expSum - exp * exp) / (expSum * expSum);
     }
 }

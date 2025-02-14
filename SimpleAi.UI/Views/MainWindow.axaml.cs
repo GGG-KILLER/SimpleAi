@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace SimpleAi.UI;
+namespace SimpleAi.UI.Views;
 
 public partial class MainWindow : Window
 {

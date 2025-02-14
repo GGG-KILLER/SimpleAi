@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="SimpleAi.UI.MainWindow"
+        x:Class="SimpleAi.UI.Views.MainWindow"
         Title="AI">
     <Grid ColumnDefinitions="Auto,*" RowDefinitions="*">
         <StackPanel Grid.Column="0" Grid.Row="0">

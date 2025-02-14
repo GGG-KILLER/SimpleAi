@@ -12,8 +12,10 @@ public interface ICostFunction<T>
 public readonly struct MeanSquaredError<T> : ICostFunction<T>
     where T : INumberBase<T> // T.One
 {
-    public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual) =>
-        T.One / (T.One + T.One) * MathEx.Aggregate<T, BUPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(expected, actual);
+    public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
+        => T.One
+           / (T.One + T.One)
+           * MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(expected, actual);
 }
 
 public readonly struct CrossEntropy<T> : ICostFunction<T>
