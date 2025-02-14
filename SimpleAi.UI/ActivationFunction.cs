@@ -4,7 +4,7 @@ namespace SimpleAi.UI;
 
 internal enum ActivationFunction
 {
-    [SuppressMessage("ReSharper", "InconsistentNaming", Justification = "Class name.")]
+    [SuppressMessage(category: "ReSharper", checkId: "InconsistentNaming", Justification = "Class name.")]
     ReLU,
     Sigmoid,
     TanH,

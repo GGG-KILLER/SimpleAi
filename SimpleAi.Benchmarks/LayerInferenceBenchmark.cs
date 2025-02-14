@@ -3,16 +3,15 @@ using BenchmarkDotNet.Engines;
 
 namespace SimpleAi.Benchmarks;
 
-[SimpleJob(RunStrategy.Throughput)]
-[MemoryRandomization]
+[SimpleJob(RunStrategy.Throughput), MemoryRandomization]
 public class LayerInferenceBenchmark
 {
-    private Layer<float, ReLU<float>>? _floatLayer;
+    private double[]?                    _doubleInputs;
     private Layer<double, ReLU<double>>? _doubleLayer;
-    private float[]? _floatInputs;
-    private double[]? _doubleInputs;
-    private float[]? _floatOutputs;
-    private double[]? _doubleOutputs;
+    private double[]?                    _doubleOutputs;
+    private float[]?                     _floatInputs;
+    private Layer<float, ReLU<float>>?   _floatLayer;
+    private float[]?                     _floatOutputs;
 
     [Params(5, 10, 250, 5000, 10_000)]
     public int Inputs { get; set; }
@@ -24,9 +23,9 @@ public class LayerInferenceBenchmark
     public void GlobalSetup()
     {
         _floatLayer = new Layer<float, ReLU<float>>(Inputs, Neurons);
-        _floatLayer.RandomizeWeights(0, 1);
+        _floatLayer.RandomizeWeights(mean: 0, stdDev: 1);
         _doubleLayer = new Layer<double, ReLU<double>>(Inputs, Neurons);
-        _doubleLayer.RandomizeWeights(0, 1);
+        _doubleLayer.RandomizeWeights(mean: 0, stdDev: 1);
 
         _floatInputs = new float[Inputs];
         for (var idx = 0; idx < _floatInputs.Length; idx++)

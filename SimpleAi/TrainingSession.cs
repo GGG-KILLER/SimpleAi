@@ -2,12 +2,8 @@ namespace SimpleAi;
 
 public abstract class TrainingSession<T>
 {
-    private readonly Memory<TrainingDataPoint<T>>     _trainingData;
     private readonly Dictionary<ILayer<T>, LayerData> _layerData;
-
-    public ReadOnlySpan<TrainingDataPoint<T>> TrainingDataPoints => _trainingData.Span;
-
-    public InferenceSession<T> InferenceSession { get; }
+    private readonly Memory<TrainingDataPoint<T>>     _trainingData;
 
     protected TrainingSession(IEnumerable<TrainingDataPoint<T>> trainingDataPoints, INeuralNetwork<T> neuralNetwork)
     {
@@ -17,12 +13,16 @@ public abstract class TrainingSession<T>
 
         for (var idx = 0; idx < neuralNetwork.LayerCount; idx++)
         {
-            var layer = neuralNetwork[idx];
+            ILayer<T> layer = neuralNetwork[idx];
             _layerData[layer] = new LayerData(
                 GC.AllocateUninitializedArray<T>(layer.Size * layer.Inputs),
                 GC.AllocateUninitializedArray<T>(layer.Size));
         }
     }
+
+    public ReadOnlySpan<TrainingDataPoint<T>> TrainingDataPoints => _trainingData.Span;
+
+    public InferenceSession<T> InferenceSession { get; }
 
     internal LayerData this[ILayer<T> layer] => _layerData[layer];
 

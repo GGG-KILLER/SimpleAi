@@ -5,6 +5,7 @@ namespace SimpleAi.UI;
 internal static partial class Regexes
 {
     [GeneratedRegex(
+        pattern:
         @"^\s*(?<startX>\d+(\.\d+)?)\s*,\s*(?<startY>\d+(\.\d+)?)\s*:\s*(?<endX>\d+(\.\d+)?)\s*,\s*(?<endY>\d+(\.\d+)?)\s*$",
         RegexOptions.CultureInvariant
         | RegexOptions.ExplicitCapture

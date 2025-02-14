@@ -13,9 +13,13 @@ internal class AreaConverter : IValueConverter
     {
         if (value is ValueTuple<VectorTypeT, VectorTypeT> (var start, var end)
             && targetType.IsAssignableFrom(typeof(string)))
-        {
-            return string.Format(CultureInfo.InvariantCulture, "{0},{1}:{2},{3}", start.X, start.Y, end.X, end.Y);
-        }
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                format: "{0},{1}:{2},{3}",
+                start.X,
+                start.Y,
+                end.X,
+                end.Y);
 
         return new BindingNotification(new InvalidCastException(), BindingErrorType.Error);
     }
@@ -28,11 +32,9 @@ internal class AreaConverter : IValueConverter
 
         Match match = Regexes.Range.Match(from);
         if (!match.Success)
-        {
             return new BindingNotification(
-                new FormatException("Invalid area format, should be startX,startY:endX,endY"),
+                new FormatException(message: "Invalid area format, should be startX,startY:endX,endY"),
                 BindingErrorType.Error);
-        }
 
         VectorTypeT start =
             (NumberTypeT.Parse(match.Groups[groupname: "startX"].ValueSpan, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture),
@@ -41,9 +43,9 @@ internal class AreaConverter : IValueConverter
                  NumberStyles.AllowDecimalPoint,
                  CultureInfo.InvariantCulture));
         VectorTypeT end =
-            (NumberTypeT.Parse(match.Groups["endX"].ValueSpan, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture),
+            (NumberTypeT.Parse(match.Groups[groupname: "endX"].ValueSpan, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture),
              NumberTypeT.Parse(
-                 match.Groups["endY"].ValueSpan,
+                 match.Groups[groupname: "endY"].ValueSpan,
                  NumberStyles.AllowDecimalPoint,
                  CultureInfo.InvariantCulture));
         return (start, end);

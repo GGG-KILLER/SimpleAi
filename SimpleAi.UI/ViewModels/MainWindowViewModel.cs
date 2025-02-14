@@ -11,16 +11,14 @@ namespace SimpleAi.UI.ViewModels;
 
 internal sealed partial class MainWindowViewModel : ObservableObject
 {
-    private static readonly char[]                        s_hiddenLayersSplitters = [',', ';', ':',];
+    private static readonly char[]                        s_hiddenLayersSplitters = [',', ';', ':'];
     private                 INeuralNetwork<NumberTypeT>?  _neuralNetwork;
     private                 TrainingSession<NumberTypeT>? _trainingSession;
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsCommandInProgress { get; private set; }
 
     [ObservableProperty]
@@ -62,6 +60,8 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
     public Action? Refresh { get; set; }
 
+    private bool CanExecuteStartTraining => !IsTraining && !IsCommandInProgress;
+
     [RelayCommand(
         CanExecute = nameof(CanExecuteStartTraining),
         AllowConcurrentExecutions = false,
@@ -72,7 +72,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
         IsTraining = true;
         try
         {
-            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(millisecondsDelay: 1, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
             TrainingDataPoint<NumberTypeT>[] trainingData = GenerateTrainingData();
             TrainingDataPoint<NumberTypeT>[] checkData    = GenerateTrainingData();
@@ -80,34 +80,40 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             TrainingDataPlot!.Clear();
             Coordinates[] safeDataPoints = trainingData.Concat(checkData).Where(
                                                            // ReSharper disable once CompareOfFloatsByEqualityOperator
-                                                           x => x.ExpectedOutputs.Span[0] == 1
-                                                                && x.ExpectedOutputs.Span[1] == 0)
-                                                       .Select(x => new Coordinates(x.Inputs.Span[0], x.Inputs.Span[1]))
-                                                       .ToArray();
+                                                           x => x.ExpectedOutputs.Span[index: 0] == 1
+                                                                && x.ExpectedOutputs.Span[index: 1] == 0)
+                                                       .Select(
+                                                           x => new Coordinates(
+                                                               x.Inputs.Span[index: 0],
+                                                               x.Inputs.Span[index: 1])).ToArray();
             Coordinates[] unsafeDataPoints = trainingData.Concat(checkData).Where(
                                                              // ReSharper disable once CompareOfFloatsByEqualityOperator
-                                                             x => x.ExpectedOutputs.Span[0] == 0
-                                                                  && x.ExpectedOutputs.Span[1] == 1)
+                                                             x => x.ExpectedOutputs.Span[index: 0] == 0
+                                                                  && x.ExpectedOutputs.Span[index: 1] == 1)
                                                          .Select(
-                                                             x => new Coordinates(x.Inputs.Span[0], x.Inputs.Span[1]))
-                                                         .ToArray();
+                                                             x => new Coordinates(
+                                                                 x.Inputs.Span[index: 0],
+                                                                 x.Inputs.Span[index: 1])).ToArray();
             Scatter safePointsPlottable   = TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
             Scatter unsafePointsPlottable = TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
-            TrainingDataPlot.Axes.AutoScale([safePointsPlottable, unsafePointsPlottable,]);
+            TrainingDataPlot.Axes.AutoScale([safePointsPlottable, unsafePointsPlottable]);
             Refresh!();
 
             int[] layers = HiddenLayers.Split(
                                            s_hiddenLayersSplitters,
                                            StringSplitOptions.RemoveEmptyEntries
                                            | StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)
-                                       .Append(2).ToArray();
+                                       .Append(element: 2).ToArray();
             _neuralNetwork = ActivationFunction switch
             {
-                ActivationFunction.ReLU    => new NeuralNetwork<NumberTypeT, ReLU<NumberTypeT>>(2, layers),
-                ActivationFunction.Sigmoid => new NeuralNetwork<NumberTypeT, Sigmoid<NumberTypeT>>(2, layers),
-                ActivationFunction.TanH    => new NeuralNetwork<NumberTypeT, TanH<NumberTypeT>>(2, layers),
-                ActivationFunction.SoftMax => new NeuralNetwork<NumberTypeT, SoftMax<NumberTypeT>>(2, layers),
-                _                          => throw new InvalidOperationException("Invalid activation function."),
+                ActivationFunction.ReLU => new NeuralNetwork<NumberTypeT, ReLU<NumberTypeT>>(inputs: 2, layers),
+                ActivationFunction.Sigmoid =>
+                    new NeuralNetwork<NumberTypeT, Sigmoid<NumberTypeT>>(inputs: 2, layers),
+                ActivationFunction.TanH => new NeuralNetwork<NumberTypeT, TanH<NumberTypeT>>(inputs: 2, layers),
+                ActivationFunction.SoftMax => new NeuralNetwork<NumberTypeT, SoftMax<NumberTypeT>>(
+                    inputs: 2,
+                    layers),
+                _ => throw new InvalidOperationException(message: "Invalid activation function."),
             };
             _trainingSession = CostFunction switch
             {
@@ -118,7 +124,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 CostFunction.CrossEntropy => new TrainingSession<NumberTypeT, CrossEntropy<NumberTypeT>>(
                     trainingData,
                     _neuralNetwork),
-                _ => throw new InvalidOperationException("Invalid cost function."),
+                _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
 
             _neuralNetwork.RandomizeWeights(WeightsMean, WeightsStdDev);
@@ -179,40 +185,40 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
                 if (isSafe)
                 {
-                    trainingDataInputs[idx * 2 + 0] = SafeArea.Start.X
-                                                      + Random.Shared.NextSingle()
-                                                      * (SafeArea.End.X - SafeArea.Start.X);
-                    trainingDataInputs[idx * 2 + 1] = SafeArea.Start.Y
-                                                      + Random.Shared.NextSingle()
-                                                      * (SafeArea.End.Y - SafeArea.Start.Y);
-                    trainingDataOutputs[idx * 2 + 0] = 1;
-                    trainingDataOutputs[idx * 2 + 1] = 0;
+                    trainingDataInputs[(idx * 2) + 0] = SafeArea.Start.X
+                                                        + (Random.Shared.NextSingle()
+                                                           * (SafeArea.End.X - SafeArea.Start.X));
+                    trainingDataInputs[(idx * 2) + 1] = SafeArea.Start.Y
+                                                        + (Random.Shared.NextSingle()
+                                                           * (SafeArea.End.Y - SafeArea.Start.Y));
+                    trainingDataOutputs[(idx * 2) + 0] = 1;
+                    trainingDataOutputs[(idx * 2) + 1] = 0;
                     generatedSafe++;
                 }
                 else
                 {
                 regen:
-                    trainingDataInputs[idx * 2 + 0] = TotalArea.Start.X
-                                                      + Random.Shared.NextSingle()
-                                                      * (TotalArea.End.X - TotalArea.Start.X);
-                    trainingDataInputs[idx * 2 + 1] = TotalArea.Start.Y
-                                                      + Random.Shared.NextSingle()
-                                                      * (TotalArea.End.Y - TotalArea.Start.Y);
+                    trainingDataInputs[(idx * 2) + 0] = TotalArea.Start.X
+                                                        + (Random.Shared.NextSingle()
+                                                           * (TotalArea.End.X - TotalArea.Start.X));
+                    trainingDataInputs[(idx * 2) + 1] = TotalArea.Start.Y
+                                                        + (Random.Shared.NextSingle()
+                                                           * (TotalArea.End.Y - TotalArea.Start.Y));
 
-                    if (SafeArea.Start.X < trainingDataInputs[idx * 2 + 0]
-                        && trainingDataInputs[idx * 2 + 0] < SafeArea.End.X
-                        && SafeArea.Start.Y < trainingDataInputs[idx * 2 + 1]
-                        && trainingDataInputs[idx * 2 + 1] < SafeArea.End.Y)
+                    if (SafeArea.Start.X < trainingDataInputs[(idx * 2) + 0]
+                        && trainingDataInputs[(idx * 2) + 0] < SafeArea.End.X
+                        && SafeArea.Start.Y < trainingDataInputs[(idx * 2) + 1]
+                        && trainingDataInputs[(idx * 2) + 1] < SafeArea.End.Y)
                         goto regen;
 
-                    trainingDataOutputs[idx * 2 + 0] = 0;
-                    trainingDataOutputs[idx * 2 + 1] = 1;
+                    trainingDataOutputs[(idx * 2) + 0] = 0;
+                    trainingDataOutputs[(idx * 2) + 1] = 1;
                     generatedUnsafe++;
                 }
 
                 trainingData[idx] = new TrainingDataPoint<NumberTypeT>(
-                    trainingDataInputs.AsMemory(idx * 2, 2),
-                    trainingDataOutputs.AsMemory(idx * 2, 2));
+                    trainingDataInputs.AsMemory(idx * 2, length: 2),
+                    trainingDataOutputs.AsMemory(idx * 2, length: 2));
             }
 
             return trainingData;
@@ -227,19 +233,17 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             {
                 _neuralNetwork!.RunInference(_trainingSession!.InferenceSession, point.Inputs.Span, output);
                 // ReSharper disable once CompareOfFloatsByEqualityOperator (These comparisons don't have that risk)
-                if (point.ExpectedOutputs.Span[0] == 1 && point.ExpectedOutputs.Span[1] == 0)
+                if (point.ExpectedOutputs.Span[index: 0] == 1 && point.ExpectedOutputs.Span[index: 1] == 0)
                 {
-                    if (output[0] > output[1]) hits++;
+                    if (output[index: 0] > output[index: 1]) hits++;
                 }
                 else
                 {
-                    if (output[0] < output[1]) hits++;
+                    if (output[index: 0] < output[index: 1]) hits++;
                 }
             }
 
             return (double) hits / trainingDataPoints.Length;
         }
     }
-
-    private bool CanExecuteStartTraining => !IsTraining && !IsCommandInProgress;
 }

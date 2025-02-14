@@ -30,23 +30,11 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
 {
     private readonly Layer<T, TActivation>[] _layers;
 
-    public int Inputs { get; }
-
-    public int Outputs { get; }
-
-    public int LayerCount => _layers.Length;
-
-    public ReadOnlySpan<Layer<T, TActivation>> Layers => _layers.AsSpan();
-
-    public ILayer<T> this[Index index] => _layers[index];
-
     public NeuralNetwork(int inputs, params ReadOnlySpan<int> layerSizes)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputs);
         if (layerSizes.Length < 1)
-        {
-            throw new ArgumentException("At least one layer is required.", nameof(layerSizes));
-        }
+            throw new ArgumentException(message: "At least one layer is required.", nameof(layerSizes));
 
         Inputs  = inputs;
         Outputs = layerSizes[^1];
@@ -55,9 +43,7 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
         for (var idx = 0; idx < layerSizes.Length; idx++)
         {
             if (layerSizes[idx] <= 0)
-            {
-                throw new ArgumentException("Layer sizes must be greater than zero.", nameof(layerSizes));
-            }
+                throw new ArgumentException(message: "Layer sizes must be greater than zero.", nameof(layerSizes));
 
             _layers[idx] = new Layer<T, TActivation>(idx == 0 ? inputs : layerSizes[idx - 1], layerSizes[idx]);
         }
@@ -70,87 +56,63 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
         Outputs = layers[^1].Size;
     }
 
-    public static NeuralNetwork<T, TActivation> UnsafeLoad(T[][] weights, T[][] biases)
-    {
-        var layers = new Layer<T, TActivation>[weights.Length];
-        for (var idx = 0; idx < weights.Length; idx++)
-        {
-            layers[idx] = Layer<T, TActivation>.LoadUnsafe(weights[idx], biases[idx]);
-        }
-        return new NeuralNetwork<T, TActivation>(layers);
-    }
+    public ReadOnlySpan<Layer<T, TActivation>> Layers => _layers.AsSpan();
+
+    public int Inputs { get; }
+
+    public int Outputs { get; }
+
+    public int LayerCount => _layers.Length;
+
+    public ILayer<T> this[Index index] => _layers[index];
 
     public void RandomizeWeights(T mean, T stdDev)
     {
-        for (int idx = 0; idx < _layers.Length; idx++)
-        {
-            _layers.UnsafeIndex(idx).RandomizeWeights(mean, stdDev);
-        }
+        for (var idx = 0; idx < _layers.Length; idx++) _layers.UnsafeIndex(idx).RandomizeWeights(mean, stdDev);
     }
 
     [SkipLocalsInit]
     public void RunInference(InferenceSession<T> inferenceSession, ReadOnlySpan<T> inputs, Span<T> output)
     {
         if (inputs.Length != Inputs)
-        {
-            throw new ArgumentException("Input vector does not have the correct amount of elements.", nameof(inputs));
-        }
+            throw new ArgumentException(
+                message: "Input vector does not have the correct amount of elements.",
+                nameof(inputs));
         if (output.Length != Outputs)
-        {
-            throw new ArgumentException("Output does not have the correct size.", nameof(output));
-        }
+            throw new ArgumentException(message: "Output does not have the correct size.", nameof(output));
 
-        var inference = RunInferenceCore(inferenceSession, inputs);
+        ReadOnlySpan<T> inference = RunInferenceCore(inferenceSession, inputs);
         inference.CopyTo(output);
     }
 
     [SkipLocalsInit]
     public T AverageCost(TrainingSession<T> trainingSession)
     {
-        T   totalCost          = T.AdditiveIdentity;
-        var trainingDataPoints = trainingSession.TrainingDataPoints;
-        var inferenceSession   = trainingSession.InferenceSession;
+        T                                  totalCost          = T.AdditiveIdentity;
+        ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints = trainingSession.TrainingDataPoints;
+        InferenceSession<T>                inferenceSession   = trainingSession.InferenceSession;
 
-        foreach (var point in trainingDataPoints)
+        foreach (TrainingDataPoint<T> point in trainingDataPoints)
         {
-            var inference = RunInferenceCore(inferenceSession, point.Inputs.Span);
+            ReadOnlySpan<T> inference = RunInferenceCore(inferenceSession, point.Inputs.Span);
             totalCost += trainingSession.CalculateCost(point.ExpectedOutputs.Span, inference);
         }
 
         return totalCost / T.CreateChecked(trainingDataPoints.Length);
     }
 
-    private ReadOnlySpan<T> RunInferenceCore(InferenceSession<T> inferenceSession, ReadOnlySpan<T> inputs)
-    {
-        inputs.CopyTo(inferenceSession.Input);
-
-        ref var layer     = ref _layers.Ref();
-        ref var layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
-        while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
-        {
-            layer.RunInference(inferenceSession.Input[..layer.Inputs], inferenceSession.Output[..layer.Size]);
-            inferenceSession.Swap();
-
-            layer = ref Unsafe.Add(ref layer, 1)!;
-        }
-
-        // After the last iteration, the output buffer gets swapped with the input,
-        // so we copy it to the final output.
-        return inferenceSession.Input[..Outputs];
-    }
-
     public void Train(TrainingSession<T> trainingSession, T learnRate)
     {
         AverageCostFunc<T> costFunction = AverageCost;
-        var                originalCost = costFunction(trainingSession);
+        T                  originalCost = costFunction(trainingSession);
 
-        ref var layer     = ref _layers.Ref();
-        ref var layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
+        ref Layer<T, TActivation> layer     = ref _layers.Ref();
+        ref Layer<T, TActivation> layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
         while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
         {
             layer.CalculateCostGradients(trainingSession, costFunction, originalCost);
 
-            layer = ref Unsafe.Add(ref layer, 1)!;
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
         }
 
         layer = ref _layers.Ref()!;
@@ -158,8 +120,35 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
         {
             layer.ApplyCostGradients(trainingSession, learnRate);
 
-            layer = ref Unsafe.Add(ref layer, 1)!;
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
         }
+    }
+
+    public static NeuralNetwork<T, TActivation> UnsafeLoad(T[][] weights, T[][] biases)
+    {
+        var layers = new Layer<T, TActivation>[weights.Length];
+        for (var idx = 0; idx < weights.Length; idx++)
+            layers[idx] = Layer<T, TActivation>.LoadUnsafe(weights[idx], biases[idx]);
+        return new NeuralNetwork<T, TActivation>(layers);
+    }
+
+    private ReadOnlySpan<T> RunInferenceCore(InferenceSession<T> inferenceSession, ReadOnlySpan<T> inputs)
+    {
+        inputs.CopyTo(inferenceSession.Input);
+
+        ref Layer<T, TActivation> layer     = ref _layers.Ref();
+        ref Layer<T, TActivation> layersEnd = ref Unsafe.Add(ref layer, _layers.Length);
+        while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
+        {
+            layer.RunInference(inferenceSession.Input[..layer.Inputs], inferenceSession.Output[..layer.Size]);
+            inferenceSession.Swap();
+
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
+        }
+
+        // After the last iteration, the output buffer gets swapped with the input,
+        // so we copy it to the final output.
+        return inferenceSession.Input[..Outputs];
     }
 }
 

@@ -26,7 +26,7 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
 
         public static Vector<T> Execute(Vector<T> values)
         {
-            var exp = ExpOp<T>.Execute(values);
+            Vector<T> exp = ExpOp<T>.Execute(values);
             return Vector<T>.One / (Vector<T>.One + exp);
         }
     }
@@ -35,13 +35,13 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            var activated = ActivationOp.Execute(value);
+            T? activated = ActivationOp.Execute(value);
             return activated * (T.One - activated);
         }
 
         public static Vector<T> Execute(Vector<T> values)
         {
-            var activated = ActivationOp.Execute(values);
+            Vector<T> activated = ActivationOp.Execute(values);
             return activated * (Vector<T>.One - activated);
         }
     }
@@ -60,7 +60,7 @@ public readonly struct TanH<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            var exp2 = T.Exp((T.One + T.One) * value);
+            T? exp2 = T.Exp((T.One + T.One) * value);
             return (exp2 - T.One) / (exp2 + T.One);
         }
 
@@ -75,19 +75,19 @@ public readonly struct TanH<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            var activated = ActivationOp.Execute(value);
-            return T.One - activated * activated;
+            T? activated = ActivationOp.Execute(value);
+            return T.One - (activated * activated);
         }
 
         public static Vector<T> Execute(Vector<T> values)
         {
-            var activated = ActivationOp.Execute(values);
-            return Vector<T>.One - activated * activated;
+            Vector<T> activated = ActivationOp.Execute(values);
+            return Vector<T>.One - (activated * activated);
         }
     }
 }
 
-[SuppressMessage("ReSharper", "InconsistentNaming", Justification = "Name of algorithm.")]
+[SuppressMessage(category: "ReSharper", checkId: "InconsistentNaming", Justification = "Name of algorithm.")]
 public readonly struct ReLU<T> : IActivationFunction<T> where T : INumber<T> // T.Zero, T.Max
 {
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
@@ -122,22 +122,22 @@ public readonly struct SoftMax<T> : IActivationFunction<T>
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
         MathEx.Unary<T, ExpOp<T>>(inputs, outputs);
-        var expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
+        T expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
         MathEx.Binary<T, DivOp<T>>(outputs, expSum, outputs);
     }
 
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
         MathEx.Unary<T, ExpOp<T>>(inputs, outputs);
-        var expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
+        T expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
         MathEx.Binary<T, LastDerivativeStep>(outputs, expSum, outputs);
     }
 
     private readonly struct LastDerivativeStep : IBinOp<T>
     {
-        public static T Execute(T exp, T expSum) => (exp * expSum - exp * exp) / (expSum * expSum);
+        public static T Execute(T exp, T expSum) => ((exp * expSum) - (exp * exp)) / (expSum * expSum);
 
         public static Vector<T> Execute(Vector<T> exp, Vector<T> expSum)
-            => (exp * expSum - exp * exp) / (expSum * expSum);
+            => ((exp * expSum) - (exp * exp)) / (expSum * expSum);
     }
 }

@@ -12,7 +12,10 @@ internal interface IBinOp<T>
     static abstract Vector<T> Execute(Vector<T> lefts, Vector<T> rights);
 }
 
-[SuppressMessage("ReSharper", "RedundantExtendsListEntry", Justification = "Isn't entirely obvious.")]
+[SuppressMessage(
+    category: "ReSharper",
+    checkId: "RedundantExtendsListEntry",
+    Justification = "Isn't entirely obvious.")]
 internal readonly partial struct AddOp<T> : IBinOp<T> where T : IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>
 {
     public static T Execute(T left, T right) => left + right;

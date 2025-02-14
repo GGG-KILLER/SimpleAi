@@ -20,8 +20,7 @@ public readonly struct NaiveSquaredError<T> : ICostFunction<T>
 public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberBase<T> // T.One
 {
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        => T.One
-           / (T.One + T.One)
+        => (T.One / (T.One + T.One))
            * MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(expected, actual);
 }
 
@@ -35,7 +34,7 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
     {
         public static T Execute(T expected, T actual)
         {
-            var res = expected == T.One ? -T.Log(actual) : -T.Log(T.One - actual);
+            T res = expected == T.One ? -T.Log(actual) : -T.Log(T.One - actual);
             if (typeof(T) == typeof(Half))
                 res = Half.IsNaN(Unsafe.BitCast<T, Half>(res)) ? T.Zero : res;
             else if (typeof(T) == typeof(float))
@@ -48,19 +47,19 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
         {
             if (typeof(T) == typeof(float))
             {
-                var nlog   = -Vector.Log(actual.As<T, float>());
-                var nlogm1 = -Vector.Log(Vector<float>.One - actual.As<T, float>());
-                var res = Vector.ConditionalSelect(
+                Vector<float> nlog   = -Vector.Log(actual.As<T, float>());
+                Vector<float> nlogm1 = -Vector.Log(Vector<float>.One - actual.As<T, float>());
+                Vector<float> res = Vector.ConditionalSelect(
                     Vector.Equals(expected.As<T, float>(), Vector<float>.One),
                     nlog,
                     nlogm1);
                 return Vector.ConditionalSelect(Vector.IsNaN(res), Vector<float>.Zero, res).As<float, T>();
             }
-            else if (typeof(T) == typeof(double))
+            if (typeof(T) == typeof(double))
             {
-                var nlog   = -Vector.Log(actual.As<T, double>());
-                var nlogm1 = -Vector.Log(Vector<double>.One - actual.As<T, double>());
-                var res = Vector.ConditionalSelect(
+                Vector<double> nlog   = -Vector.Log(actual.As<T, double>());
+                Vector<double> nlogm1 = -Vector.Log(Vector<double>.One - actual.As<T, double>());
+                Vector<double> res = Vector.ConditionalSelect(
                     Vector.Equals(expected.As<T, double>(), Vector<double>.One),
                     nlog,
                     nlogm1);
@@ -68,7 +67,7 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
             }
             else
             {
-                var res = Vector<T>.Zero;
+                Vector<T> res = Vector<T>.Zero;
                 for (var idx = 0; idx < Vector<T>.Count; idx++)
                     res = res.WithElement(idx, Execute(expected[idx], actual[idx]));
                 return res;

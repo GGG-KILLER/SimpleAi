@@ -12,22 +12,24 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         IMultiplot multiPlot = Plot.Multiplot;
-        multiPlot.AddPlots(3);
+        multiPlot.AddPlots(total: 3);
 
         var vm = (MainWindowViewModel) DataContext!;
-        vm.TrainingDataPlot = multiPlot.GetPlot(0);
-        vm.CostPlot         = multiPlot.GetPlot(1);
-        vm.AccuracyPlot     = multiPlot.GetPlot(2);
+        vm.TrainingDataPlot = multiPlot.GetPlot(index: 0);
+        vm.CostPlot         = multiPlot.GetPlot(index: 1);
+        vm.AccuracyPlot     = multiPlot.GetPlot(index: 2);
         vm.Refresh          = Plot.Refresh;
 
-        vm.TrainingDataPlot.Title("Training Data");
-        vm.CostPlot.Title("Cost");
-        vm.AccuracyPlot.Title("Accuracy");
+        vm.TrainingDataPlot.Title(text: "Training Data");
+        vm.CostPlot.Title(text: "Cost");
+        vm.AccuracyPlot.Title(text: "Accuracy");
 
         var layout = new CustomGrid();
-        layout.Set(multiPlot.GetPlot(0), new GridCell(0, 0, 4, 2, 2, 2));
-        layout.Set(multiPlot.GetPlot(1), new GridCell(1, 0, 2, 2));
-        layout.Set(multiPlot.GetPlot(2), new GridCell(1, 1, 2, 2));
+        layout.Set(
+            multiPlot.GetPlot(index: 0),
+            new GridCell(rowIndex: 0, colIndex: 0, rowCount: 4, colCount: 2, rowSpan: 2, colSpan: 2));
+        layout.Set(multiPlot.GetPlot(index: 1), new GridCell(rowIndex: 1, colIndex: 0, rowCount: 2, colCount: 2));
+        layout.Set(multiPlot.GetPlot(index: 2), new GridCell(rowIndex: 1, colIndex: 1, rowCount: 2, colCount: 2));
         multiPlot.Layout = layout;
     }
 }
