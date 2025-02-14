@@ -2,16 +2,17 @@ namespace SimpleAi;
 
 public abstract class TrainingSession<T>
 {
-    private readonly ReadOnlyMemory<TrainingDataPoint<T>> _trainingData;
+    private readonly Memory<TrainingDataPoint<T>>     _trainingData;
     private readonly Dictionary<ILayer<T>, LayerData> _layerData;
 
     public ReadOnlySpan<TrainingDataPoint<T>> TrainingDataPoints => _trainingData.Span;
+
     public InferenceSession<T> InferenceSession { get; }
 
     protected TrainingSession(IEnumerable<TrainingDataPoint<T>> trainingDataPoints, INeuralNetwork<T> neuralNetwork)
     {
-        _trainingData = trainingDataPoints.ToArray();
-        _layerData = [];
+        _trainingData    = trainingDataPoints.ToArray();
+        _layerData       = [];
         InferenceSession = new InferenceSession<T>(neuralNetwork);
 
         for (var idx = 0; idx < neuralNetwork.LayerCount; idx++)
@@ -27,14 +28,16 @@ public abstract class TrainingSession<T>
 
     public abstract T CalculateCost(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual);
 
-    internal readonly record struct LayerData(
-        Memory<T> WeightGradientCosts,
-        Memory<T> BiasGradientCosts);
+    public void ShuffleTrainingData() => Random.Shared.Shuffle(_trainingData.Span);
+
+    internal readonly record struct LayerData(Memory<T> WeightGradientCosts, Memory<T> BiasGradientCosts);
 }
 
-public sealed class TrainingSession<T, TCost>(IEnumerable<TrainingDataPoint<T>> trainingDataPoints, INeuralNetwork<T> neuralNetwork)
-    : TrainingSession<T>(trainingDataPoints, neuralNetwork)
-    where TCost : ICostFunction<T>
+public sealed class TrainingSession<T, TCost>(
+    IEnumerable<TrainingDataPoint<T>> trainingDataPoints,
+    INeuralNetwork<T>                 neuralNetwork
+) : TrainingSession<T>(trainingDataPoints, neuralNetwork) where TCost : ICostFunction<T>
 {
-    public override T CalculateCost(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual) => TCost.Calculate(expected, actual);
+    public override T CalculateCost(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
+        => TCost.Calculate(expected, actual);
 }

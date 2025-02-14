@@ -2,14 +2,83 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:scg="clr-namespace:System.Collections.Generic;assembly=netstandard"
         xmlns:sp="clr-namespace:ScottPlot.Avalonia;assembly=ScottPlot.Avalonia"
+        xmlns:ai="clr-namespace:SimpleAi.UI"
+        xmlns:vm="clr-namespace:SimpleAi.UI.ViewModels"
+        xmlns:converters="clr-namespace:SimpleAi.UI.Views.Converters"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="SimpleAi.UI.Views.MainWindow"
-        Title="AI">
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*">
-        <StackPanel Grid.Column="0" Grid.Row="0">
-            <TextBlock>Hidden Layers</TextBlock> <TextBox></TextBox>
-        </StackPanel>
-        <sp:AvaPlot Grid.Column="1" Name="Plot" />
+        x:Class="SimpleAi.UI.Views.MainWindow" x:DataType="vm:MainWindowViewModel"
+        Title="AI"
+        Padding="5">
+    <Window.DataContext>
+        <vm:MainWindowViewModel />
+    </Window.DataContext>
+
+    <Grid ColumnDefinitions="Auto, Auto, *, Auto, Auto" RowDefinitions="*, Auto">
+        <ScrollViewer Grid.Column="0" Grid.Row="0" Grid.RowSpan="2">
+            <StackPanel Margin="0 0 10 0">
+                <StackPanel.Resources>
+                    <scg:List x:Key="ActivationFunctions" x:TypeArguments="ai:ActivationFunction">
+                        <ai:ActivationFunction>Sigmoid</ai:ActivationFunction>
+                        <ai:ActivationFunction>ReLU</ai:ActivationFunction>
+                        <ai:ActivationFunction>SoftMax</ai:ActivationFunction>
+                        <ai:ActivationFunction>TanH</ai:ActivationFunction>
+                    </scg:List>
+                    <scg:List x:Key="CostFunctions" x:TypeArguments="ai:CostFunction">
+                        <ai:CostFunction>NaiveSquaredError</ai:CostFunction>
+                        <ai:CostFunction>MeanSquaredError</ai:CostFunction>
+                        <ai:CostFunction>CrossEntropy</ai:CostFunction>
+                    </scg:List>
+                    <converters:AreaConverter x:Key="AreaConverter" />
+                </StackPanel.Resources>
+
+                <Label Target="TotalAreaText">Total area*</Label>
+                <TextBox Name="TotalAreaText" Margin="0 2" HorizontalAlignment="Stretch"
+                         Text="{Binding TotalArea, Converter={StaticResource AreaConverter}, Mode=TwoWay}" />
+                <Label Target="SafeAreaText">Safe area*</Label>
+                <TextBox Name="SafeAreaText" Margin="0 2" HorizontalAlignment="Stretch"
+                         Text="{Binding SafeArea, Converter={StaticResource AreaConverter}, Mode=TwoWay}" />
+                <Label Target="ActivationFunction">Activation function*</Label>
+                <ComboBox Name="ActivationFunction" Margin="0 2" HorizontalAlignment="Stretch"
+                          ItemsSource="{StaticResource ActivationFunctions}"
+                          SelectedItem="{Binding ActivationFunction, Mode=TwoWay}" />
+                <Label Target="CostFunction">Cost function*</Label>
+                <ComboBox Name="CostFunction" Margin="0 2" HorizontalAlignment="Stretch"
+                          ItemsSource="{StaticResource CostFunctions}"
+                          SelectedItem="{Binding CostFunction, Mode=TwoWay}" />
+                <Label Target="LearningRateText">Learning rate*</Label>
+                <NumericUpDown Name="LearningRateText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
+                               Maximum="10000" Value="{Binding LearningRate, Mode=TwoWay}"
+                               ParsingNumberStyle="AllowDecimalPoint" ClipValueToMinMax="False" />
+                <Label Target="WeightsMeanText">Weights' Mean*</Label>
+                <NumericUpDown Name="WeightsMeanText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
+                               Maximum="10000000" Value="{Binding WeightsMean, Mode=TwoWay}"
+                               ParsingNumberStyle="AllowDecimalPoint" />
+                <Label Target="WeightsStdDevText">Weights' Std. Dev.*</Label>
+                <NumericUpDown Name="WeightsStdDevText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.00001"
+                               Maximum="100000" Value="{Binding WeightsStdDev, Mode=TwoWay}"
+                               ParsingNumberStyle="AllowDecimalPoint" />
+                <Label Target="SafePointsCount">Safe points*</Label>
+                <NumericUpDown Name="SafePointsCount" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
+                               Maximum="100000000" Value="{Binding SafePoints, Mode=TwoWay}"
+                               Increment="1" ParsingNumberStyle="None" />
+                <Label Target="UnsafePointsCount">Unsafe points*</Label>
+                <NumericUpDown Name="UnsafePointsCount" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
+                               Maximum="100000000" Value="{Binding UnsafePoints, Mode=TwoWay}"
+                               Increment="1" ParsingNumberStyle="None" />
+                <Label Target="HiddenLayersText">Hidden layers</Label>
+                <TextBox Name="HiddenLayersText" Margin="0 2" HorizontalAlignment="Stretch"
+                         Text="{Binding HiddenLayers, Mode=TwoWay}" />
+            </StackPanel>
+        </ScrollViewer>
+        <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="10 0 0 0" Background="LightGray"
+                      ResizeDirection="Columns" />
+        <sp:AvaPlot Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="3" Margin="0 0 0 5" Name="Plot" />
+        <Button Grid.Row="1" Grid.Column="3" Name="StartTrainingButton" Margin="0 0 5 0"
+                Command="{Binding StartTrainingCommand}">
+            Start
+        </Button>
+        <Button Grid.Row="1" Grid.Column="4" Name="StopTrainingButton" Command="{Binding StartTrainingCancelCommand}">Stop</Button>
     </Grid>
 </Window>
