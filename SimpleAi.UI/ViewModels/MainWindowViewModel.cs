@@ -1,19 +1,24 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MIConvexHull;
 using ScottPlot;
+using ScottPlot.AxisLimitManagers;
 using ScottPlot.Plottables;
+using SimpleAi.UI.Maths;
 
 namespace SimpleAi.UI.ViewModels;
 
 internal sealed partial class MainWindowViewModel : ObservableObject
 {
-    private static readonly char[]                        s_hiddenLayersSplitters = [',', ';', ':'];
-    private                 INeuralNetwork<NumberTypeT>?  _neuralNetwork;
-    private                 TrainingSession<NumberTypeT>? _trainingSession;
+    private static readonly char[] s_hiddenLayersSplitters = [',', ';', ':'];
+
+    private INeuralNetwork<NumberTypeT>?  _neuralNetwork;
+    private TrainingSession<NumberTypeT>? _trainingSession;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
@@ -22,19 +27,19 @@ internal sealed partial class MainWindowViewModel : ObservableObject
     public partial bool IsCommandInProgress { get; private set; }
 
     [ObservableProperty]
-    public partial (VectorTypeT Start, VectorTypeT End) TotalArea { get; set; } = ((0, 0), (100, 100));
+    public partial Vector2DRange TotalArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(100, 100));
 
     [ObservableProperty]
-    public partial (VectorTypeT Start, VectorTypeT End) SafeArea { get; set; } = ((0, 0), (20, 20));
+    public partial Vector2DRange SafeArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(20, 20));
 
     [ObservableProperty]
     public partial ActivationFunction ActivationFunction { get; set; } = ActivationFunction.Sigmoid;
 
     [ObservableProperty]
-    public partial CostFunction CostFunction { get; set; } = CostFunction.MeanSquaredError;
+    public partial CostFunction CostFunction { get; set; } = CostFunction.NaiveSquaredError;
 
     [ObservableProperty]
-    public partial NumberTypeT LearningRate { get; set; } = 0.05;
+    public partial NumberTypeT LearningRate { get; set; } = 0.05f;
 
     // ReSharper disable once RedundantDefaultMemberInitializer (It's better to be explicit in this case)
     [ObservableProperty]
@@ -72,13 +77,18 @@ internal sealed partial class MainWindowViewModel : ObservableObject
         IsTraining = true;
         try
         {
+            // Leave UI Thread (hopefully)
             await Task.Delay(millisecondsDelay: 1, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
-            TrainingDataPoint<NumberTypeT>[] trainingData = GenerateTrainingData();
-            TrainingDataPoint<NumberTypeT>[] checkData    = GenerateTrainingData();
+            TrainingDataPoint<NumberTypeT>[] trainingData = TrainingHelpers.GenerateTrainingData(
+                TotalArea,
+                SafeArea,
+                UnsafePoints,
+                SafePoints);
+            // TrainingDataPoint<NumberTypeT>[] checkData    = GenerateTrainingData();
 
             TrainingDataPlot!.Clear();
-            Coordinates[] safeDataPoints = trainingData.Concat(checkData).Where(
+            Coordinates[] safeDataPoints = trainingData.Where(
                                                            // ReSharper disable once CompareOfFloatsByEqualityOperator
                                                            x => x.ExpectedOutputs.Span[index: 0] == 1
                                                                 && x.ExpectedOutputs.Span[index: 1] == 0)
@@ -86,7 +96,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                                                            x => new Coordinates(
                                                                x.Inputs.Span[index: 0],
                                                                x.Inputs.Span[index: 1])).ToArray();
-            Coordinates[] unsafeDataPoints = trainingData.Concat(checkData).Where(
+            Coordinates[] unsafeDataPoints = trainingData.Where(
                                                              // ReSharper disable once CompareOfFloatsByEqualityOperator
                                                              x => x.ExpectedOutputs.Span[index: 0] == 0
                                                                   && x.ExpectedOutputs.Span[index: 1] == 1)
@@ -94,9 +104,13 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                                                              x => new Coordinates(
                                                                  x.Inputs.Span[index: 0],
                                                                  x.Inputs.Span[index: 1])).ToArray();
-            Scatter safePointsPlottable   = TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
-            Scatter unsafePointsPlottable = TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
-            TrainingDataPlot.Axes.AutoScale([safePointsPlottable, unsafePointsPlottable]);
+            TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
+            TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
+            TrainingDataPlot.Axes.SetLimits(
+                TotalArea.Start.X - 5,
+                TotalArea.End.X + 5,
+                TotalArea.Start.Y - 5,
+                TotalArea.End.Y + 5);
             Refresh!();
 
             int[] layers = HiddenLayers.Split(
@@ -131,19 +145,32 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             CostPlot!.Clear();
             AccuracyPlot!.Clear();
-            var        iterations   = 0;
-            DataLogger costPlot     = CostPlot.Add.DataLogger();
-            DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
-            costPlot.ViewJump(paddingFraction: 0);
-            accuracyPlot.ViewJump(paddingFraction: 0);
+            var iterations = 0;
+
+            var safeArea = ConvexHull();
+            Polygon safeAreaPolygon = TrainingDataPlot.Add.Polygon(
+                safeArea.Select(vec => new Coordinates(vec.X, vec.Y)).ToArray());
+            safeAreaPolygon.LineWidth = 0;
+            safeAreaPolygon.FillColor = Colors.LightGray.WithAlpha(.5);
+
+            DataLogger costPlot = CostPlot.Add.DataLogger();
+            costPlot.Axes.XAxis            = CostPlot.Axes.Bottom;
+            costPlot.Axes.XAxis.Label.Text = "Generation";
+            costPlot.LegendText            = "Cost (should go down ideally)";
+            costPlot.ManageAxisLimits      = true;
+            costPlot.AxisManager           = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
             costPlot.Add(iterations, _neuralNetwork.AverageCost(_trainingSession));
-            accuracyPlot.Add(iterations, CalculateAccuracy(checkData));
-            costPlot.Axes.XAxis                = CostPlot.Axes.Bottom;
-            costPlot.Axes.XAxis.Label.Text     = "Generation";
-            costPlot.LegendText                = "Cost (should go down ideally)";
-            accuracyPlot.Axes.XAxis            = AccuracyPlot.Axes.Bottom;
+
+            DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
+            accuracyPlot.Axes.XAxis = AccuracyPlot.Axes.Bottom;
             accuracyPlot.Axes.XAxis.Label.Text = "Generation";
-            accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
+            accuracyPlot.LegendText = "Accuracy (should go up ideally)";
+            accuracyPlot.ManageAxisLimits = true;
+            accuracyPlot.AxisManager = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
+            accuracyPlot.Add(
+                iterations,
+                _neuralNetwork.CalculateAccuracy(_trainingSession.InferenceSession, trainingData));
+
             Refresh!();
 
             while (!cancellationToken.IsCancellationRequested)
@@ -152,98 +179,44 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 _neuralNetwork.Train(_trainingSession, LearningRate);
                 iterations++;
                 costPlot.Add(iterations, _neuralNetwork.AverageCost(_trainingSession));
-                accuracyPlot.Add(iterations, CalculateAccuracy(checkData));
+                accuracyPlot.Add(
+                    iterations,
+                    _neuralNetwork.CalculateAccuracy(_trainingSession.InferenceSession, trainingData));
+
+                safeArea = ConvexHull();
+                safeAreaPolygon.UpdateCoordinates(safeArea.Select(vec => new Coordinates(vec.X, vec.Y)).ToArray());
                 Refresh!();
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
         }
         finally
         {
             IsTraining = false;
         }
+    }
 
-        return;
+    private IList<Vector2D> ConvexHull()
+    {
+        const NumberTypeT delta    = 0.05f;
+        var               vertexes = new List<Vector2D>();
 
-        TrainingDataPoint<NumberTypeT>[] GenerateTrainingData()
+        Span<NumberTypeT> results = stackalloc NumberTypeT[2];
+        for (NumberTypeT x = TotalArea.Start.X; x <= TotalArea.End.X; x += delta)
         {
-            var trainingData        = new TrainingDataPoint<NumberTypeT>[SafePoints + UnsafePoints];
-            var trainingDataInputs  = new NumberTypeT[(SafePoints + UnsafePoints) * 2];
-            var trainingDataOutputs = new NumberTypeT[(SafePoints + UnsafePoints) * 2];
-            var generatedSafe       = 0;
-            var generatedUnsafe     = 0;
-
-            for (var idx = 0; idx < trainingData.Length; idx++)
+            for (NumberTypeT y = TotalArea.Start.Y; y <= TotalArea.End.Y; y += delta)
             {
-                bool isSafe;
-                if (generatedSafe < SafePoints && generatedUnsafe < UnsafePoints)
-                    isSafe = Random.Shared.NextSingle() > 0.5f;
-                else
-                    isSafe = generatedSafe < SafePoints;
-
-                if (isSafe)
-                {
-                    trainingDataInputs[(idx * 2) + 0] = SafeArea.Start.X
-                                                        + (Random.Shared.NextSingle()
-                                                           * (SafeArea.End.X - SafeArea.Start.X));
-                    trainingDataInputs[(idx * 2) + 1] = SafeArea.Start.Y
-                                                        + (Random.Shared.NextSingle()
-                                                           * (SafeArea.End.Y - SafeArea.Start.Y));
-                    trainingDataOutputs[(idx * 2) + 0] = 1;
-                    trainingDataOutputs[(idx * 2) + 1] = 0;
-                    generatedSafe++;
-                }
-                else
-                {
-                regen:
-                    trainingDataInputs[(idx * 2) + 0] = TotalArea.Start.X
-                                                        + (Random.Shared.NextSingle()
-                                                           * (TotalArea.End.X - TotalArea.Start.X));
-                    trainingDataInputs[(idx * 2) + 1] = TotalArea.Start.Y
-                                                        + (Random.Shared.NextSingle()
-                                                           * (TotalArea.End.Y - TotalArea.Start.Y));
-
-                    if (SafeArea.Start.X < trainingDataInputs[(idx * 2) + 0]
-                        && trainingDataInputs[(idx * 2) + 0] < SafeArea.End.X
-                        && SafeArea.Start.Y < trainingDataInputs[(idx * 2) + 1]
-                        && trainingDataInputs[(idx * 2) + 1] < SafeArea.End.Y)
-                        goto regen;
-
-                    trainingDataOutputs[(idx * 2) + 0] = 0;
-                    trainingDataOutputs[(idx * 2) + 1] = 1;
-                    generatedUnsafe++;
-                }
-
-                trainingData[idx] = new TrainingDataPoint<NumberTypeT>(
-                    trainingDataInputs.AsMemory(idx * 2, length: 2),
-                    trainingDataOutputs.AsMemory(idx * 2, length: 2));
+                results.Clear();
+                _neuralNetwork!.RunInference(_trainingSession!.InferenceSession, [x, y], results);
+                if (TrainingHelpers.IsSafeish(results)) vertexes.Add(new Vector2D(x, y));
             }
-
-            return trainingData;
         }
 
-        double CalculateAccuracy(TrainingDataPoint<NumberTypeT>[] trainingDataPoints)
-        {
-            var               hits   = 0;
-            Span<NumberTypeT> output = stackalloc NumberTypeT[2];
+        if (vertexes.Count < 2) return [];
 
-            foreach (TrainingDataPoint<NumberTypeT> point in trainingDataPoints)
-            {
-                _neuralNetwork!.RunInference(_trainingSession!.InferenceSession, point.Inputs.Span, output);
-                // ReSharper disable once CompareOfFloatsByEqualityOperator (These comparisons don't have that risk)
-                if (point.ExpectedOutputs.Span[index: 0] == 1 && point.ExpectedOutputs.Span[index: 1] == 0)
-                {
-                    if (output[index: 0] > output[index: 1]) hits++;
-                }
-                else
-                {
-                    if (output[index: 0] < output[index: 1]) hits++;
-                }
-            }
+        ConvexHullCreationResult<Vector2D> result = MIConvexHull.ConvexHull.Create2D(vertexes, tolerance: delta);
+        if (result.Outcome == ConvexHullCreationResultOutcome.Success) return result.Result;
 
-            return (double) hits / trainingDataPoints.Length;
-        }
+        Console.WriteLine(
+            $"Error generating convex hull: {result.Outcome} | {result.ErrorMessage} (points: {string.Join(", ", vertexes)})");
+        return [];
     }
 }

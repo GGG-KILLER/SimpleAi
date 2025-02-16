@@ -30,7 +30,7 @@
                         <ai:CostFunction>MeanSquaredError</ai:CostFunction>
                         <ai:CostFunction>CrossEntropy</ai:CostFunction>
                     </scg:List>
-                    <converters:AreaConverter x:Key="AreaConverter" />
+                    <converters:Vector2DRangeConverter x:Key="AreaConverter" />
                 </StackPanel.Resources>
 
                 <Label Target="TotalAreaText">Total area*</Label>
