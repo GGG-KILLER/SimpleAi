@@ -22,11 +22,11 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
 
     private readonly struct ActivationOp : IUnOp<T>
     {
-        public static T Execute(T value) => T.One / (T.One + T.Exp(value));
+        public static T Execute(T value) => T.One / (T.One + T.Exp(-value));
 
         public static Vector<T> Execute(Vector<T> values)
         {
-            Vector<T> exp = ExpOp<T>.Execute(values);
+            Vector<T> exp = ExpOp<T>.Execute(-values);
             return Vector<T>.One / (Vector<T>.One + exp);
         }
     }
@@ -35,7 +35,7 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            T? activated = ActivationOp.Execute(value);
+            T activated = ActivationOp.Execute(value);
             return activated * (T.One - activated);
         }
 
@@ -60,7 +60,7 @@ public readonly struct TanH<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            T? exp2 = T.Exp((T.One + T.One) * value);
+            T exp2 = T.Exp((T.One + T.One) * value);
             return (exp2 - T.One) / (exp2 + T.One);
         }
 
@@ -75,7 +75,7 @@ public readonly struct TanH<T> : IActivationFunction<T>
     {
         public static T Execute(T value)
         {
-            T? activated = ActivationOp.Execute(value);
+            T activated = ActivationOp.Execute(value);
             return T.One - (activated * activated);
         }
 
