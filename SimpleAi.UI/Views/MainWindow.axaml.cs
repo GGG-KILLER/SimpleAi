@@ -26,10 +26,10 @@ public partial class MainWindow : Window
 
         var layout = new CustomGrid();
         layout.Set(
-            multiPlot.GetPlot(index: 0),
+            vm.TrainingDataPlot,
             new GridCell(rowIndex: 0, colIndex: 0, rowCount: 4, colCount: 2, rowSpan: 2, colSpan: 2));
-        layout.Set(multiPlot.GetPlot(index: 1), new GridCell(rowIndex: 1, colIndex: 0, rowCount: 2, colCount: 2));
-        layout.Set(multiPlot.GetPlot(index: 2), new GridCell(rowIndex: 1, colIndex: 1, rowCount: 2, colCount: 2));
+        layout.Set(vm.CostPlot, new GridCell(rowIndex: 1, colIndex: 0, rowCount: 2, colCount: 2));
+        layout.Set(vm.AccuracyPlot, new GridCell(rowIndex: 1, colIndex: 1, rowCount: 2, colCount: 2));
         multiPlot.Layout = layout;
     }
 }

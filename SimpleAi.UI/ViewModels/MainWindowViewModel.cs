@@ -89,21 +89,13 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             TrainingDataPlot!.Clear();
             Coordinates[] safeDataPoints = trainingData.Where(
-                                                           // ReSharper disable once CompareOfFloatsByEqualityOperator
-                                                           x => x.ExpectedOutputs.Span[index: 0] == 1
-                                                                && x.ExpectedOutputs.Span[index: 1] == 0)
-                                                       .Select(
-                                                           x => new Coordinates(
-                                                               x.Inputs.Span[index: 0],
-                                                               x.Inputs.Span[index: 1])).ToArray();
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                static x => x.ExpectedOutputs.Span[index: 0] == 1 && x.ExpectedOutputs.Span[index: 1] == 0).Select(
+                static x => new Coordinates(x.Inputs.Span[index: 0], x.Inputs.Span[index: 1])).ToArray();
             Coordinates[] unsafeDataPoints = trainingData.Where(
-                                                             // ReSharper disable once CompareOfFloatsByEqualityOperator
-                                                             x => x.ExpectedOutputs.Span[index: 0] == 0
-                                                                  && x.ExpectedOutputs.Span[index: 1] == 1)
-                                                         .Select(
-                                                             x => new Coordinates(
-                                                                 x.Inputs.Span[index: 0],
-                                                                 x.Inputs.Span[index: 1])).ToArray();
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                static x => x.ExpectedOutputs.Span[index: 0] == 0 && x.ExpectedOutputs.Span[index: 1] == 1).Select(
+                static x => new Coordinates(x.Inputs.Span[index: 0], x.Inputs.Span[index: 1])).ToArray();
             TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
             TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
             TrainingDataPlot.Axes.SetLimits(
@@ -149,7 +141,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             var safeArea = ConvexHull();
             Polygon safeAreaPolygon = TrainingDataPlot.Add.Polygon(
-                safeArea.Select(vec => new Coordinates(vec.X, vec.Y)).ToArray());
+                safeArea.Select(static vec => new Coordinates(vec.X, vec.Y)).ToArray());
             safeAreaPolygon.LineWidth = 0;
             safeAreaPolygon.FillColor = Colors.LightGray.WithAlpha(.5);
 
@@ -183,8 +175,12 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                     iterations,
                     _neuralNetwork.CalculateAccuracy(_trainingSession.InferenceSession, trainingData));
 
-                safeArea = ConvexHull();
-                safeAreaPolygon.UpdateCoordinates(safeArea.Select(vec => new Coordinates(vec.X, vec.Y)).ToArray());
+                if (iterations % 100 == 0)
+                {
+                    safeArea = ConvexHull();
+                    safeAreaPolygon.UpdateCoordinates(
+                        safeArea.Select(static vec => new Coordinates(vec.X, vec.Y)).ToArray());
+                }
                 Refresh!();
             }
         }
@@ -196,7 +192,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
     private IList<Vector2D> ConvexHull()
     {
-        const NumberTypeT delta    = 0.05f;
+        const NumberTypeT delta    = 0.25f;
         var               vertexes = new List<Vector2D>();
 
         Span<NumberTypeT> results = stackalloc NumberTypeT[2];
