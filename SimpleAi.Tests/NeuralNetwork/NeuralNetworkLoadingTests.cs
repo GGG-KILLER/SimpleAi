@@ -1,5 +1,8 @@
+using JetBrains.Annotations;
+
 namespace SimpleAi.Tests.NeuralNetwork;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class NeuralNetworkLoadingTests
 {
     [Fact]

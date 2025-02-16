@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace SimpleAi.Tests;
 
-public static class LayerAccessors
+internal static class LayerAccessors
 {
     private const BindingFlags F = BindingFlags.NonPublic | BindingFlags.Instance;
 

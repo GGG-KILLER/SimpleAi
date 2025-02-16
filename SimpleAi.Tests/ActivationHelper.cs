@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace SimpleAi.Tests;
 
-public static class ActivationHelper
+internal static class ActivationHelper
 {
     private static readonly MethodInfo s_activateMethodInfo = typeof(ActivationHelper).GetMethod(
         nameof(Activate),

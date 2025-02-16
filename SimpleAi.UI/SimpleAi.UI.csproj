@@ -20,6 +20,8 @@
             <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
         </PackageReference>
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
+        <PackageReference Include="JetBrains.Annotations" Version="2024.3.0"/>
+        <PackageReference Include="JetBrains.ExternalAnnotations" Version="10.2.155"/>
         <PackageReference Include="MIConvexHull" Version="1.1.19.1019"/>
         <PackageReference Include="ScottPlot.Avalonia" Version="5.0.54"/>
     </ItemGroup>

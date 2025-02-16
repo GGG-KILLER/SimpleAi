@@ -1,5 +1,8 @@
+using JetBrains.Annotations;
+
 namespace SimpleAi.Tests.CostFunctions;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MeanSquaredErrorFloatTests
 {
     [Theory]

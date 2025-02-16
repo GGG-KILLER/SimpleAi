@@ -1,5 +1,8 @@
+using JetBrains.Annotations;
+
 namespace SimpleAi.Tests.ActivationFunctions;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class TanHDoubleTests
 {
     [Theory]

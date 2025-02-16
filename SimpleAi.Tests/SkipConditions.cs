@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace SimpleAi.Tests;
 
-public static class SkipConditions
+internal static class SkipConditions
 {
     public static bool IntVectorsAreHardwareAccelerated => Vector.IsHardwareAccelerated && Vector<int>.IsSupported;
 

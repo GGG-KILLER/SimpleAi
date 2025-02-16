@@ -112,15 +112,15 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
         {
             layer.CalculateCostGradients(trainingSession, costFunction, originalCost);
 
-            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1);
         }
 
-        layer = ref _layers.Ref()!;
+        layer = ref _layers.Ref();
         while (Unsafe.IsAddressLessThan(ref layer, ref layersEnd))
         {
             layer.ApplyCostGradients(trainingSession, learnRate);
 
-            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1);
         }
     }
 
@@ -143,7 +143,7 @@ public sealed class NeuralNetwork<T, TActivation> : INeuralNetwork<T>
             layer.RunInference(inferenceSession.Input[..layer.Inputs], inferenceSession.Output[..layer.Size]);
             inferenceSession.Swap();
 
-            layer = ref Unsafe.Add(ref layer, elementOffset: 1)!;
+            layer = ref Unsafe.Add(ref layer, elementOffset: 1);
         }
 
         // After the last iteration, the output buffer gets swapped with the input,

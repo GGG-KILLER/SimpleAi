@@ -1,5 +1,8 @@
+using JetBrains.Annotations;
+
 namespace SimpleAi.Tests.Layer;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class LayerConstructorTests
 {
     [Fact]

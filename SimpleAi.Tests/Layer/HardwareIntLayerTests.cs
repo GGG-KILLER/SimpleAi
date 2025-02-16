@@ -1,7 +1,9 @@
 using System.Reflection;
+using JetBrains.Annotations;
 
 namespace SimpleAi.Tests.Layer;
 
+[UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class HardwareIntLayerTests
 {
     public static TheoryData<Type> ExecutesCorrectlyOnIntegerVectorizationPathData()
