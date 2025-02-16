@@ -146,7 +146,8 @@ public sealed class Layer<T, TActivation> : ILayer<T>
         Span<T>                      biasGradientCosts   = layerData.BiasGradientCosts.Span;
 
         // weights = weightGradientCosts * learnRate
-        MathEx.Binary<T, MulOp<T>>(weightGradientCosts, learnRate, _weights);
+        MathEx.Binary<T, MulOp<T>>(weightGradientCosts, learnRate, weightGradientCosts);
+        MathEx.Binary<T, SubOp<T>>(_weights, weightGradientCosts, _weights);
         weightGradientCosts.Clear();
 
         // biases -= biasGradientCosts * learnRate
