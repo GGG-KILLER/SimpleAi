@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using SimpleAi.Math;
 
 namespace SimpleAi;
@@ -14,14 +13,17 @@ public readonly struct NaiveSquaredError<T> : ICostFunction<T>
     IAdditionOperators<T, T, T>
 {
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        => MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(expected, actual);
+        =>
+            // Pow(actual - expected, 2)
+            MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected);
 }
 
 public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberBase<T> // T.One
 {
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
         => (T.One / (T.One + T.One))
-           * MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(expected, actual);
+           // Pow(actual - expected, 2)
+           * MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected);
 }
 
 public readonly struct CrossEntropy<T> : ICostFunction<T>
@@ -35,12 +37,7 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
         public static T Execute(T expected, T actual)
         {
             T res = expected == T.One ? -T.Log(actual) : -T.Log(T.One - actual);
-            if (typeof(T) == typeof(Half))
-                res = Half.IsNaN(Unsafe.BitCast<T, Half>(res)) ? T.Zero : res;
-            else if (typeof(T) == typeof(float))
-                res                                   = float.IsNaN(Unsafe.BitCast<T, float>(res)) ? T.Zero : res;
-            else if (typeof(T) == typeof(double)) res = double.IsNaN(Unsafe.BitCast<T, double>(res)) ? T.Zero : res;
-            return res;
+            return T.IsNaN(res) ? T.Zero : res;
         }
 
         public static Vector<T> Execute(Vector<T> expected, Vector<T> actual)
