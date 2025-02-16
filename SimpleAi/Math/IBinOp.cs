@@ -15,7 +15,7 @@ internal interface IBinOp<T>
 [SuppressMessage(
     category: "ReSharper",
     checkId: "RedundantExtendsListEntry",
-    Justification = "Isn't entirely obvious.")]
+    Justification = "Isn't entirely obvious if only looking at this file or person hasn't looked at IAggOp.")]
 internal readonly partial struct AddOp<T> : IBinOp<T> where T : IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>
 {
     public static T Execute(T left, T right) => left + right;

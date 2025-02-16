@@ -8,53 +8,37 @@ public class NeuralNetworkInferenceTests
     [Fact]
     public void NeuralNetworkX2ERunInference_Throws_exception_when_input_size_is_wrong()
     {
-        var network = new NeuralNetwork<float, ReLU<float>>(inputs: 2, 2);
-        var session = new InferenceSession<float>(network);
+        var network = new NeuralNetwork<float>(new Layer<float, ReLU<float>>(2, 2));
+        var buffer  = new InferenceBuffer<float>(network);
 
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [], stackalloc float[2]));
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [1], stackalloc float[2]));
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [1, 1, 1], stackalloc float[2]));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [], stackalloc float[2]));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [1], stackalloc float[2]));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [1, 1, 1], stackalloc float[2]));
     }
 
     [Fact]
     public void NeuralNetworkX2ERunInference_Throws_exception_when_output_size_is_wrong()
     {
-        var network = new NeuralNetwork<float, ReLU<float>>(inputs: 2, 2);
-        var session = new InferenceSession<float>(network);
+        var network = new NeuralNetwork<float>(new Layer<float, ReLU<float>>(2, 2));
+        var buffer  = new InferenceBuffer<float>(network);
 
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [1, 1], []));
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [1, 1], [1]));
-        Assert.Throws<ArgumentException>(() => network.RunInference(session, [1, 1], [1, 1, 1]));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [1, 1], []));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [1, 1], [1]));
+        Assert.Throws<ArgumentException>(() => network.RunInference(buffer, [1, 1], [1, 1, 1]));
     }
 
     [Fact]
     public void
         NeuralNetworkX2ERunInference_Calls_layers_in_correct_order_with_correct_inputs_on_an_odd_number_of_layers()
     {
-        // @formatter:off
-        NeuralNetwork<float, ReLU<float>> network = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
-            [
-                1f, 2f,
-                3f, 4f,
-            ],
-            [
-                5f, 6f,
-                7f, 8f,
-            ],
-            [
-                 9f, 10f,
-                11f, 12f,
-            ],
-        ], [
-            [0f, 0f],
-            [0f, 0f],
-            [0f, 0f],
-        ]);
-        // @formatter:on
-        var session = new InferenceSession<float>(network);
+        var network = new NeuralNetwork<float>(
+            Layer<float, ReLU<float>>.LoadUnsafe([1f, 2f, 3f, 4f], [0f, 0f]),
+            Layer<float, ReLU<float>>.LoadUnsafe([5f, 6f, 7f, 8f], [0f, 0f]),
+            Layer<float, ReLU<float>>.LoadUnsafe([9f, 10f, 11f, 12f], [0f, 0f]));
+        var buffer = new InferenceBuffer<float>(network);
 
         Span<float> output = stackalloc float[2];
-        network.RunInference(session, [13, 14], output);
+        network.RunInference(buffer, [13, 14], output);
 
         // First hidden layer
         float a11 = ActivationHelper.Activate<float, ReLU<float>>((1f * 13f) + (2f * 14f) + 0f);
@@ -76,25 +60,13 @@ public class NeuralNetworkInferenceTests
     public void
         NeuralNetworkX2ERunInference_Calls_layers_in_correct_order_with_correct_inputs_on_an_even_number_of_layers()
     {
-        // @formatter:off
-        NeuralNetwork<float, ReLU<float>> network = NeuralNetwork<float, ReLU<float>>.UnsafeLoad([
-            [
-                1f, 2f,
-                3f, 4f,
-            ],
-            [
-                5f, 6f,
-                7f, 8f,
-            ],
-        ], [
-            [0f, 0f],
-            [0f, 0f],
-        ]);
-        // @formatter:on
-        var session = new InferenceSession<float>(network);
+        var network = new NeuralNetwork<float>(
+            Layer<float, ReLU<float>>.LoadUnsafe([1f, 2f, 3f, 4f], [0f, 0f]),
+            Layer<float, ReLU<float>>.LoadUnsafe([5f, 6f, 7f, 8f], [0f, 0f]));
+        var buffer = new InferenceBuffer<float>(network);
 
         Span<float> output = stackalloc float[2];
-        network.RunInference(session, [13, 14], output);
+        network.RunInference(buffer, [13, 14], output);
 
         // First hidden layer
         float a11 = ActivationHelper.Activate<float, ReLU<float>>((1f * 13f) + (2f * 14f) + 0f);

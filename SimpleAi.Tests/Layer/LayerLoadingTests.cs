@@ -13,9 +13,9 @@ public class LayerLoadingTests
             [7UL, 8UL]);
 
         Assert.Equal(expected: 3, layer.Inputs);
-        Assert.Equal(expected: 2, layer.Size);
+        Assert.Equal(expected: 2, layer.Outputs);
 
-        Assert.Equal([1UL, 2UL, 3UL, 4UL, 5UL, 6UL], LayerAccessors.GetWeights(layer));
-        Assert.Equal([7Ul, 8UL], LayerAccessors.GetBiases(layer));
+        Assert.Equal([1UL, 2UL, 3UL, 4UL, 5UL, 6UL], layer.Weights);
+        Assert.Equal([7Ul, 8UL], layer.Biases);
     }
 }

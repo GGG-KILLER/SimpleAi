@@ -1,22 +1,47 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using JetBrains.Annotations;
 using SimpleAi.Math;
 
 namespace SimpleAi;
 
+/// <summary>
+/// The interface for activation functions.
+/// </summary>
+/// <typeparam name="T">The numeric type accepted by the activation function.</typeparam>
+[PublicAPI]
 public interface IActivationFunction<T>
 {
+    /// <summary>
+    /// Executes the activation function on a set of <paramref name="inputs"/>, storing its result in the
+    /// <paramref name="outputs"/> buffer.
+    /// </summary>
+    /// <param name="inputs">The inputs to the activation function.</param>
+    /// <param name="outputs">The buffer to store the outputs for each input on.</param>
+    [PublicAPI]
     static abstract void Activate(ReadOnlySpan<T> inputs, Span<T> outputs);
 
+    /// <summary>
+    /// Runs the provided input <paramref name="values"/> through the derivative of the activation function, storing its
+    /// results in the <paramref name="outputs"/> buffer.
+    /// </summary>
+    /// <param name="values">The values to pass through the derivative of the activation function.</param>
+    /// <param name="outputs">The buffer where the results of the derivative will be stored.</param>
+    [PublicAPI]
     static abstract void Derivative(ReadOnlySpan<T> values, Span<T> outputs);
 }
 
+[PublicAPI]
 public readonly struct Sigmoid<T> : IActivationFunction<T>
     where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, ActivationOp>(inputs, outputs);
 
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
@@ -47,12 +72,17 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
     }
 }
 
+[PublicAPI]
 public readonly struct TanH<T> : IActivationFunction<T>
     where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
 {
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, ActivationOp>(inputs, outputs);
 
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
@@ -87,12 +117,17 @@ public readonly struct TanH<T> : IActivationFunction<T>
     }
 }
 
+[PublicAPI]
 [SuppressMessage(category: "ReSharper", checkId: "InconsistentNaming", Justification = "Name of algorithm.")]
 public readonly struct ReLU<T> : IActivationFunction<T> where T : INumber<T> // T.Zero, T.Max
 {
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, ActivationOp>(inputs, outputs);
 
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
@@ -112,6 +147,7 @@ public readonly struct ReLU<T> : IActivationFunction<T> where T : INumber<T> // 
     }
 }
 
+[PublicAPI]
 public readonly struct SoftMax<T> : IActivationFunction<T>
     where T : IExponentialFunctions<T>,                   // T.Exp
     IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
@@ -119,6 +155,8 @@ public readonly struct SoftMax<T> : IActivationFunction<T>
     ISubtractionOperators<T, T, T>,                       // LastDerivativeStep (operator -)
     IMultiplyOperators<T, T, T>                           // LastDerivativeStep (operator *)
 {
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
         MathEx.Unary<T, ExpOp<T>>(inputs, outputs);
@@ -126,6 +164,8 @@ public readonly struct SoftMax<T> : IActivationFunction<T>
         MathEx.Binary<T, DivOp<T>>(outputs, expSum, outputs);
     }
 
+    /// <inheritdoc />
+    [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
         MathEx.Unary<T, ExpOp<T>>(inputs, outputs);

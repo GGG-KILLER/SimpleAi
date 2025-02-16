@@ -1,8 +1,10 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
+using JetBrains.Annotations;
 
 namespace SimpleAi.Benchmarks;
 
+[UsedImplicitly(ImplicitUseKindFlags.Access, ImplicitUseTargetFlags.WithMembers)]
 [SimpleJob(RunStrategy.Throughput), MemoryRandomization]
 public class LayerInferenceBenchmark
 {
@@ -14,10 +16,10 @@ public class LayerInferenceBenchmark
     private float[]?                     _floatOutputs;
 
     [Params(5, 10, 250, 5000, 10_000)]
-    public int Inputs { get; set; }
+    public int Inputs { get; [UsedImplicitly] set; }
 
     [Params(5, 10, 250, 5000, 10_000)]
-    public int Neurons { get; set; }
+    public int Neurons { get; [UsedImplicitly] set; }
 
     [GlobalSetup]
     public void GlobalSetup()

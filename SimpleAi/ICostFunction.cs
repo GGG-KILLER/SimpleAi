@@ -3,8 +3,19 @@ using SimpleAi.Math;
 
 namespace SimpleAi;
 
+/// <summary>
+/// The interface for cost (also known as loss) functions.
+/// </summary>
+/// <typeparam name="T">The numeric type accepted by the cost function.</typeparam>
 public interface ICostFunction<T>
 {
+    /// <summary>
+    /// Calculates the cost of the neural network based on the <paramref name="expected"/> outputs and the
+    /// <paramref name="actual"/> inputs.
+    /// </summary>
+    /// <param name="expected">The inputs that were expected to be returned by the neural network.</param>
+    /// <param name="actual">The inputs that were actually obtained when executing the inference.</param>
+    /// <returns>The current cost of the neural network.</returns>
     static abstract T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual);
 }
 
@@ -12,6 +23,7 @@ public readonly struct NaiveSquaredError<T> : ICostFunction<T>
     where T : ISubtractionOperators<T, T, T>, IMultiplyOperators<T, T, T>, IAdditiveIdentity<T, T>,
     IAdditionOperators<T, T, T>
 {
+    /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
         =>
             // Pow(actual - expected, 2)
@@ -20,6 +32,7 @@ public readonly struct NaiveSquaredError<T> : ICostFunction<T>
 
 public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberBase<T> // T.One
 {
+    /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
         => (T.One / (T.One + T.One))
            // Pow(actual - expected, 2)
@@ -29,6 +42,7 @@ public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberB
 public readonly struct CrossEntropy<T> : ICostFunction<T>
     where T : INumberBase<T> /* T.Zero, T.One */, ILogarithmicFunctions<T> /* T.Log */
 {
+    /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
         => MathEx.Aggregate<T, CrossEntropyLoopOp, AddOp<T>>(expected, actual);
 

@@ -6,39 +6,34 @@ namespace SimpleAi.Tests.NeuralNetwork;
 public class NeuralNetworkConstructorTests
 {
     [Fact]
-    public void NeuralNetworkX2Ector_Throws_exception_on_negative_or_zero_input_count()
+    public void NeuralNetworkX2Ector_Throws_exception_on_no_layers()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new NeuralNetwork<float, ReLU<float>>(inputs: -1, 1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new NeuralNetwork<float, ReLU<float>>(inputs: 0, 1));
+        Assert.Throws<ArgumentException>(static () => new NeuralNetwork<float>());
     }
 
     [Fact]
-    public void NeuralNetworkX2Ector_Throws_exception_without_any_layer_sizes()
+    public void NeuralNetworkX2Ector_Throws_exception_on_mismatched_layers()
     {
-        Assert.Throws<ArgumentException>(() => new NeuralNetwork<float, ReLU<float>>(inputs: 1));
+        Assert.Throws<ArgumentException>(
+            static () => new NeuralNetwork<float>(
+                new Layer<float, ReLU<float>>(2, 2),
+                new Layer<float, ReLU<float>>(4, 2)));
     }
 
     [Fact]
-    public void NeuralNetworkX2Ector_Throws_exception_with_negative_or_zeroed_layer_sizes()
+    public void NeuralNetworkX2Ector_Creates_correctly_assign_inputs_outputs_and_layers()
     {
-        Assert.Throws<ArgumentException>(() => new NeuralNetwork<float, ReLU<float>>(inputs: 1, -1));
-        Assert.Throws<ArgumentException>(() => new NeuralNetwork<float, ReLU<float>>(inputs: 1, 0));
-    }
-
-    [Fact]
-    public void NeuralNetworkX2Ector_Creates_correct_layer_structure()
-    {
-        var network = new NeuralNetwork<double, ReLU<double>>(inputs: 2, 5, 5, 3);
+        var network = new NeuralNetwork<double>(
+            new Layer<double, ReLU<double>>(2, 10),
+            new Layer<double, ReLU<double>>(10, 15));
 
         Assert.Equal(expected: 2, network.Inputs);
-        Assert.Equal(expected: 3, network.Outputs);
+        Assert.Equal(expected: 15, network.Outputs);
 
-        Assert.Equal(expected: 3, network.Layers.Length);
+        Assert.Equal(expected: 2, network.Layers.Length);
         Assert.Equal(expected: 2, network.Layers[index: 0].Inputs);
-        Assert.Equal(expected: 5, network.Layers[index: 0].Size);
-        Assert.Equal(expected: 5, network.Layers[index: 1].Inputs);
-        Assert.Equal(expected: 5, network.Layers[index: 1].Size);
-        Assert.Equal(expected: 5, network.Layers[index: 2].Inputs);
-        Assert.Equal(expected: 3, network.Layers[index: 2].Size);
+        Assert.Equal(expected: 10, network.Layers[index: 0].Outputs);
+        Assert.Equal(expected: 10, network.Layers[index: 1].Inputs);
+        Assert.Equal(expected: 15, network.Layers[index: 1].Outputs);
     }
 }

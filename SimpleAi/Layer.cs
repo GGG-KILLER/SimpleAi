@@ -1,71 +1,195 @@
-﻿using System.Numerics;
+﻿using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using JetBrains.Annotations;
 using SimpleAi.Math;
 
 namespace SimpleAi;
 
-public interface ILayer<T>
+/// <summary>
+/// The base class for layers.
+/// </summary>
+/// <typeparam name="T">The numeric type used by this layer.</typeparam>
+/// <remarks>
+/// <para>Activation must be done on the layer itself.</para>
+/// </remarks>
+[PublicAPI]
+public abstract class Layer<T> where T : unmanaged, INumber<T>
 {
-    int Inputs { get; }
+    protected readonly T[] MutBiases;
+    protected readonly T[] MutWeights;
 
-    int Size { get; }
-
-    // Init
-    void RandomizeWeights(T mean, T stdDev);
-
-    // Inference
-    void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
-
-    // Training
-    void CalculateCostGradients(TrainingSession<T> trainingSession, AverageCostFunc<T> getAverageCost, T originalCost);
-
-    void ApplyCostGradients(TrainingSession<T> trainingSession, T learnRate);
-}
-
-public sealed class Layer<T, TActivation> : ILayer<T>
-    where T : unmanaged, INumber<T> where TActivation : IActivationFunction<T>
-{
-    private readonly T[] _biases;
-    private readonly T[] _weights;
-
-    public Layer(int inputCount, int size)
+    /// <summary>
+    /// Initializes a new instance of the layer.
+    /// </summary>
+    /// <param name="inputCount">The number of inputs this layer will accept.</param>
+    /// <param name="outputCount">The number of outputs (neurons) this layer will have.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <list type="bullet">
+    ///     <item>Thrown when <paramref name="inputCount"/> is negative or zero.</item>
+    ///     <item>Thrown when <paramref name="outputCount"/> is negative or zero.</item>
+    /// </list>
+    /// </exception>
+    protected Layer(int inputCount, int outputCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputCount);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(size);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(outputCount);
 
-        _weights = GC.AllocateUninitializedArray<T>(size * inputCount);
-        _biases  = GC.AllocateUninitializedArray<T>(size);
+        MutWeights = GC.AllocateUninitializedArray<T>(outputCount * inputCount);
+        MutBiases  = GC.AllocateUninitializedArray<T>(outputCount);
 
-        Inputs = inputCount;
-        Size   = size;
+        Inputs  = inputCount;
+        Outputs = outputCount;
     }
 
+    /// <summary>
+    /// Number of inputs this layer accepts.
+    /// </summary>
+    [PublicAPI]
     public int Inputs { get; }
 
-    public int Size { get; }
+    /// <summary>
+    /// Number of outputs this layer accepts.
+    /// </summary>
+    [PublicAPI]
+    public int Outputs { get; }
 
-    public void RandomizeWeights(T mean, T stdDev)
+    /// <summary>
+    /// The weights used by this layer.
+    /// </summary>
+    [PublicAPI]
+    public ReadOnlySpan<T> Weights => MutWeights.AsSpan();
+
+    /// <summary>
+    /// The biases used by this layer.
+    /// </summary>
+    [PublicAPI]
+    public ReadOnlySpan<T> Biases => MutBiases.AsSpan();
+
+    /// <summary>
+    ///     <para>Randomizes the weights of this layer using a normal distribution.</para>
+    ///     <para>Will generate weights that are <paramref name="mean"/> ± <paramref name="stdDev"/>.</para>
+    /// </summary>
+    /// <param name="mean">The middle point of the weight distribution.</param>
+    /// <param name="stdDev">The margin of randomness to allow around the <paramref name="mean"/>.</param>
+    public virtual void RandomizeWeights(T mean, T stdDev)
     {
-        for (var nodeIdx = 0; nodeIdx < _weights.Length; nodeIdx++)
-            _weights[nodeIdx] = RandomBetweenNormalDistribution(Random.Shared, mean, stdDev);
+        for (var nodeIdx = 0; nodeIdx < MutWeights.Length; nodeIdx++)
+            MutWeights[nodeIdx] = MathEx.RandomBetweenNormalDistribution(Random.Shared, mean, stdDev);
+    }
 
-        static T RandomBetweenNormalDistribution(Random random, T mean, T stdDev)
+    /// <summary>
+    /// Runs inference for this layer.
+    /// </summary>
+    /// <param name="inputs">The inputs to be processed by this layer.</param>
+    /// <param name="outputs">The output buffer where the outputs of this layer will be stored.</param>
+    /// <exception cref="ArgumentException">
+    ///     <list type="bullet">
+    ///         <item>Thrown when <paramref name="inputs"/> does not have a length of <b>at least</b> <see cref="Inputs"/>.</item>
+    ///         <item>Thrown when <paramref name="outputs"/> does not have a length of <b>at least</b> <see cref="Outputs"/>.</item>
+    ///     </list>
+    /// </exception>
+    [PublicAPI]
+    public abstract void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
+
+    /// <summary>
+    /// Calculates the cost gradients for this layer.
+    /// </summary>
+    /// <param name="averageCostFunction">The function to call to obtain the average cost of the network.</param>
+    /// <param name="originalCost">The original cost before any modifications.</param>
+    /// <param name="weightGradientCosts">The buffer where to store the cost gradients for the weights.</param>
+    /// <param name="biasGradientCosts">The buffer where to store the cost gradients for the biases.</param>
+    [SkipLocalsInit, PublicAPI]
+    protected internal virtual void CalculateCostGradients(
+        Func<T> averageCostFunction,
+        T       originalCost,
+        Span<T> weightGradientCosts,
+        Span<T> biasGradientCosts)
+    {
+        Debug.Assert(weightGradientCosts.Length == MutWeights.Length);
+        Debug.Assert(biasGradientCosts.Length == MutBiases.Length);
+
+        T delta;
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(double) || typeof(T) == typeof(float))
+            delta = T.CreateChecked(value: 0.0001);
+        else
+            delta = T.CreateChecked(value: 1);
+
+        ref T weightsStart = ref MutWeights.Ref();
+        ref T weight       = ref weightsStart;
+        ref T weightsEnd   = ref Unsafe.Add(ref weightsStart, MutWeights.Length);
+        while (Unsafe.IsAddressLessThan(ref weight, ref weightsEnd))
         {
-            double x1 = 1 - random.NextDouble();
-            double x2 = 1 - random.NextDouble();
+            weight += delta;
+            T deltaCost = averageCostFunction() - originalCost;
+            weight -= delta;
+            weightGradientCosts.UnsafeIndex(
+                (int) Unsafe.ByteOffset(ref weightsStart, ref weight) / Unsafe.SizeOf<T>()) = deltaCost / delta;
 
-            double y1 = double.Sqrt(-2.0 * double.Log(x1)) * double.Cos(2.0 * double.Pi * x2);
-            return T.CreateSaturating((y1 * double.CreateSaturating(stdDev)) + double.CreateSaturating(mean));
+            weight = ref Unsafe.Add(ref weight, elementOffset: 1);
+        }
+
+        ref T biasesStart = ref MutBiases.Ref();
+        ref T bias        = ref biasesStart;
+        ref T biasesEnd   = ref Unsafe.Add(ref biasesStart, MutBiases.Length);
+        while (Unsafe.IsAddressLessThan(ref bias, ref biasesEnd))
+        {
+            bias += delta;
+            T deltaCost = averageCostFunction() - originalCost;
+            bias -= delta;
+            biasGradientCosts.UnsafeIndex((int) Unsafe.ByteOffset(ref biasesStart, ref bias) / Unsafe.SizeOf<T>()) =
+                deltaCost / delta;
+
+            bias = ref Unsafe.Add(ref bias, elementOffset: 1);
         }
     }
 
+    /// <summary>
+    /// Applies the cost gradients previously generated by <see cref="CalculateCostGradients"/> to the weights and biases.
+    /// </summary>
+    /// <param name="weightGradientCosts">The cost gradients to apply to the weights.</param>
+    /// <param name="biasGradientCosts">The bias cost gradients to apply to the biases.</param>
+    /// <param name="learnRate">The learn rate to apply the cost gradients with.</param>
+    [SkipLocalsInit, PublicAPI]
+    protected internal void ApplyCostGradients(Span<T> weightGradientCosts, Span<T> biasGradientCosts, T learnRate)
+    {
+        // weights = weightGradientCosts * learnRate
+        MathEx.Binary<T, MulOp<T>>(weightGradientCosts, learnRate, weightGradientCosts);
+        MathEx.Binary<T, SubOp<T>>(MutWeights, weightGradientCosts, MutWeights);
+        weightGradientCosts.Clear();
+
+        // biases -= biasGradientCosts * learnRate
+        MathEx.Binary<T, MulOp<T>>(biasGradientCosts, learnRate, biasGradientCosts);
+        MathEx.Binary<T, SubOp<T>>(MutBiases, biasGradientCosts, MutBiases);
+        biasGradientCosts.Clear();
+    }
+}
+
+/// <summary>
+/// The actual implementation of the layers.
+/// </summary>
+/// <param name="inputCount">The number of inputs this layer will accept.</param>
+/// <param name="outputCount">The number of outputs (neurons) this layer will have.</param>
+/// <exception cref="ArgumentOutOfRangeException">
+/// <list type="bullet">
+///     <item>Thrown when <paramref name="inputCount"/> is negative or zero.</item>
+///     <item>Thrown when <paramref name="outputCount"/> is negative or zero.</item>
+/// </list>
+/// </exception>
+/// <typeparam name="T">The numeric type used by this layer.</typeparam>
+/// <typeparam name="TActivation">The activation function type used by this layer.</typeparam>
+[PublicAPI]
+public sealed class Layer<T, TActivation>(int inputCount, int outputCount) : Layer<T>(inputCount, outputCount)
+    where T : unmanaged, INumber<T> where TActivation : IActivationFunction<T>
+{
+    /// <inheritdoc />
     [SkipLocalsInit]
-    public void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs)
+    public override void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs)
     {
         // Localize to avoid multiple field reads
         int inputCount  = Inputs;
-        int neuronCount = Size;
+        int neuronCount = Outputs;
 
         if (inputs.Length != inputCount)
             throw new ArgumentException(
@@ -76,7 +200,7 @@ public sealed class Layer<T, TActivation> : ILayer<T>
                 $"Outputs are not the correct size. ({outputs.Length} < {neuronCount})",
                 nameof(outputs));
 
-        ref T weights   = ref _weights.Ref();
+        ref T weights   = ref MutWeights.Ref();
         ref T output    = ref outputs.Ref();
         ref T outputEnd = ref outputs.UnsafeIndex(neuronCount);
         while (Unsafe.IsAddressLessThan(ref output, ref outputEnd))
@@ -89,79 +213,23 @@ public sealed class Layer<T, TActivation> : ILayer<T>
             output  = ref Unsafe.Add(ref output, elementOffset: 1);
         }
 
-        MathEx.Binary<T, AddOp<T>>(outputs, _biases, outputs);
+        MathEx.Binary<T, AddOp<T>>(outputs, MutBiases, outputs);
         TActivation.Activate(outputs, outputs);
     }
 
-    [SkipLocalsInit]
-    public void CalculateCostGradients(
-        TrainingSession<T> trainingSession,
-        AverageCostFunc<T> getAverageCost,
-        T                  originalCost)
-    {
-        TrainingSession<T>.LayerData layerData           = trainingSession[this];
-        Span<T>                      weightGradientCosts = layerData.WeightGradientCosts.Span;
-        Span<T>                      biasGradientCosts   = layerData.BiasGradientCosts.Span;
-
-        T delta;
-        if (typeof(T) == typeof(Half) || typeof(T) == typeof(double) || typeof(T) == typeof(float))
-            delta = T.CreateChecked(value: 0.0001);
-        else
-            delta = T.CreateChecked(value: 1);
-
-        ref T weightsStart = ref _weights.Ref();
-        ref T weight       = ref weightsStart;
-        ref T weightsEnd   = ref Unsafe.Add(ref weightsStart, _weights.Length);
-        while (Unsafe.IsAddressLessThan(ref weight, ref weightsEnd))
-        {
-            weight += delta;
-            T deltaCost = getAverageCost(trainingSession) - originalCost;
-            weight -= delta;
-            weightGradientCosts.UnsafeIndex(
-                (int) Unsafe.ByteOffset(ref weightsStart, ref weight) / Unsafe.SizeOf<T>()) = deltaCost / delta;
-
-            weight = ref Unsafe.Add(ref weight, elementOffset: 1);
-        }
-
-        ref T biasesStart = ref _biases.Ref();
-        ref T bias        = ref biasesStart;
-        ref T biasesEnd   = ref Unsafe.Add(ref biasesStart, _biases.Length);
-        while (Unsafe.IsAddressLessThan(ref bias, ref biasesEnd))
-        {
-            bias += delta;
-            T deltaCost = getAverageCost(trainingSession) - originalCost;
-            bias -= delta;
-            biasGradientCosts.UnsafeIndex((int) Unsafe.ByteOffset(ref biasesStart, ref bias) / Unsafe.SizeOf<T>()) =
-                deltaCost / delta;
-
-            bias = ref Unsafe.Add(ref bias, elementOffset: 1);
-        }
-    }
-
-    [SkipLocalsInit]
-    public void ApplyCostGradients(TrainingSession<T> trainingSession, T learnRate)
-    {
-        TrainingSession<T>.LayerData layerData           = trainingSession[this];
-        Span<T>                      weightGradientCosts = layerData.WeightGradientCosts.Span;
-        Span<T>                      biasGradientCosts   = layerData.BiasGradientCosts.Span;
-
-        // weights = weightGradientCosts * learnRate
-        MathEx.Binary<T, MulOp<T>>(weightGradientCosts, learnRate, weightGradientCosts);
-        MathEx.Binary<T, SubOp<T>>(_weights, weightGradientCosts, _weights);
-        weightGradientCosts.Clear();
-
-        // biases -= biasGradientCosts * learnRate
-        MathEx.Binary<T, MulOp<T>>(biasGradientCosts, learnRate, biasGradientCosts);
-        MathEx.Binary<T, SubOp<T>>(_biases, biasGradientCosts, _biases);
-        biasGradientCosts.Clear();
-    }
-
+    /// <summary>
+    /// Loads a layer from its weights and biases without doing any validations.
+    /// </summary>
+    /// <param name="weights"></param>
+    /// <param name="biases"></param>
+    /// <returns>The loaded layer.</returns>
+    [PublicAPI]
     public static Layer<T, TActivation> LoadUnsafe(T[] weights, T[] biases)
     {
         var layer = new Layer<T, TActivation>(weights.Length / biases.Length, biases.Length);
 
-        weights.CopyTo(layer._weights.AsSpan());
-        biases.CopyTo(layer._biases.AsSpan());
+        weights.CopyTo(layer.MutWeights.AsSpan());
+        biases.CopyTo(layer.MutBiases.AsSpan());
 
         return layer;
     }
