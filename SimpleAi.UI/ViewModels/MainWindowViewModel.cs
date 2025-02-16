@@ -17,29 +17,32 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 {
     private static readonly char[] s_hiddenLayersSplitters = [',', ';', ':'];
 
-    private INeuralNetwork<NumberTypeT>?  _neuralNetwork;
-    private TrainingSession<NumberTypeT>? _trainingSession;
+    private NeuralNetwork<NumberTypeT>?   _neuralNetwork;
+    private INetworkTrainer<NumberTypeT>? _networkTrainer;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
 
-    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
-    public partial bool IsCommandInProgress { get; private set; }
+    [ObservableProperty]
+    public partial Vector2DRange TotalArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(9, 14));
 
     [ObservableProperty]
-    public partial Vector2DRange TotalArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(100, 100));
+    public partial Vector2DRange SafeArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(5.5f, 8));
 
     [ObservableProperty]
-    public partial Vector2DRange SafeArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(20, 20));
+    public partial ActivationFunction HiddenActivationFunction { get; set; } = ActivationFunction.Sigmoid;
 
     [ObservableProperty]
-    public partial ActivationFunction ActivationFunction { get; set; } = ActivationFunction.Sigmoid;
+    public partial ActivationFunction OutputActivationFunction { get; set; } = ActivationFunction.Sigmoid;
 
     [ObservableProperty]
-    public partial CostFunction CostFunction { get; set; } = CostFunction.NaiveSquaredError;
+    public partial CostFunction CostFunction { get; set; } = CostFunction.MeanSquaredError;
 
     [ObservableProperty]
-    public partial NumberTypeT LearningRate { get; set; } = 0.05f;
+    public partial NumberTypeT LearningRate { get; set; } = 0.25f;
+
+    [ObservableProperty]
+    public partial int BatchSize { get; set; } = 0;
 
     // ReSharper disable once RedundantDefaultMemberInitializer (It's better to be explicit in this case)
     [ObservableProperty]
@@ -49,13 +52,13 @@ internal sealed partial class MainWindowViewModel : ObservableObject
     public partial NumberTypeT WeightsStdDev { get; set; } = 1;
 
     [ObservableProperty]
-    public partial int SafePoints { get; set; } = 40;
+    public partial int SafePoints { get; set; } = 37;
 
     [ObservableProperty]
-    public partial int UnsafePoints { get; set; } = 60;
+    public partial int UnsafePoints { get; set; } = 87;
 
     [ObservableProperty]
-    public partial string HiddenLayers { get; set; } = string.Empty;
+    public partial string HiddenLayers { get; set; } = "10";
 
     public Plot? TrainingDataPlot { get; set; }
 
@@ -65,7 +68,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
     public Action? Refresh { get; set; }
 
-    private bool CanExecuteStartTraining => !IsTraining && !IsCommandInProgress;
+    private bool CanExecuteStartTraining => !IsTraining;
 
     [RelayCommand(
         CanExecute = nameof(CanExecuteStartTraining),
@@ -105,35 +108,49 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 TotalArea.End.Y + 5);
             Refresh!();
 
-            int[] layers = HiddenLayers.Split(
-                                           s_hiddenLayersSplitters,
-                                           StringSplitOptions.RemoveEmptyEntries
-                                           | StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)
-                                       .Append(element: 2).ToArray();
-            _neuralNetwork = ActivationFunction switch
+            int[] layerSizes = HiddenLayers.Split(
+                                               s_hiddenLayersSplitters,
+                                               StringSplitOptions.RemoveEmptyEntries
+                                               | StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)
+                                           .Append(element: 2).ToArray();
+
+            var layers = new List<Layer<NumberTypeT>>(layerSizes.Length);
+            for (var idx = 0; idx < layerSizes.Length; idx++)
             {
-                ActivationFunction.ReLU => new NeuralNetwork<NumberTypeT, ReLU<NumberTypeT>>(inputs: 2, layers),
-                ActivationFunction.Sigmoid =>
-                    new NeuralNetwork<NumberTypeT, Sigmoid<NumberTypeT>>(inputs: 2, layers),
-                ActivationFunction.TanH => new NeuralNetwork<NumberTypeT, TanH<NumberTypeT>>(inputs: 2, layers),
-                ActivationFunction.SoftMax => new NeuralNetwork<NumberTypeT, SoftMax<NumberTypeT>>(
-                    inputs: 2,
-                    layers),
-                _ => throw new InvalidOperationException(message: "Invalid activation function."),
-            };
-            _trainingSession = CostFunction switch
+                int inputs  = idx == 0 ? 2 : layerSizes[idx - 1];
+                int outputs = layerSizes[idx];
+                layers.Add(
+                    HiddenActivationFunction switch
+                    {
+                        ActivationFunction.ReLU => new Layer<NumberTypeT, ReLU<NumberTypeT>>(inputs, outputs),
+                        ActivationFunction.Sigmoid => new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(inputs, outputs),
+                        ActivationFunction.TanH => new Layer<NumberTypeT, TanH<NumberTypeT>>(inputs, outputs),
+                        ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(inputs, outputs),
+                        _ => throw new InvalidOperationException("Invalid activation function."),
+                    });
+            }
+
+            _neuralNetwork = new NeuralNetwork<NumberTypeT>(layers.ToArray());
+            _neuralNetwork.RandomizeWeights(WeightsMean, WeightsStdDev);
+
+            _networkTrainer = CostFunction switch
             {
                 CostFunction.NaiveSquaredError =>
-                    new TrainingSession<NumberTypeT, NaiveSquaredError<NumberTypeT>>(trainingData, _neuralNetwork),
+                    new NetworkTrainer<NumberTypeT, NaiveSquaredError<NumberTypeT>>(
+                        _neuralNetwork,
+                        trainingData,
+                        BatchSize),
                 CostFunction.MeanSquaredError =>
-                    new TrainingSession<NumberTypeT, MeanSquaredError<NumberTypeT>>(trainingData, _neuralNetwork),
-                CostFunction.CrossEntropy => new TrainingSession<NumberTypeT, CrossEntropy<NumberTypeT>>(
+                    new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
+                        _neuralNetwork,
+                        trainingData,
+                        BatchSize),
+                CostFunction.CrossEntropy => new NetworkTrainer<NumberTypeT, CrossEntropy<NumberTypeT>>(
+                    _neuralNetwork,
                     trainingData,
-                    _neuralNetwork),
+                    BatchSize),
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
-
-            _neuralNetwork.RandomizeWeights(WeightsMean, WeightsStdDev);
 
             CostPlot!.Clear();
             AccuracyPlot!.Clear();
@@ -151,7 +168,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             costPlot.LegendText            = "Cost (should go down ideally)";
             costPlot.ManageAxisLimits      = true;
             costPlot.AxisManager           = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
-            costPlot.Add(iterations, _neuralNetwork.AverageCost(_trainingSession));
+            costPlot.Add(iterations, _networkTrainer.CalculateTotalAverageCost());
 
             DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
             accuracyPlot.Axes.XAxis = AccuracyPlot.Axes.Bottom;
@@ -161,19 +178,18 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             accuracyPlot.AxisManager = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
             accuracyPlot.Add(
                 iterations,
-                _neuralNetwork.CalculateAccuracy(_trainingSession.InferenceSession, trainingData));
+                _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
 
             Refresh!();
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                _trainingSession.ShuffleTrainingData();
-                _neuralNetwork.Train(_trainingSession, LearningRate);
+                _networkTrainer.RunTrainingIteration(LearningRate);
                 iterations++;
-                costPlot.Add(iterations, _neuralNetwork.AverageCost(_trainingSession));
+                costPlot.Add(iterations, _networkTrainer.CalculateTotalAverageCost());
                 accuracyPlot.Add(
                     iterations,
-                    _neuralNetwork.CalculateAccuracy(_trainingSession.InferenceSession, trainingData));
+                    _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
 
                 if (iterations % 100 == 0)
                 {
@@ -183,6 +199,11 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 }
                 Refresh!();
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            throw;
         }
         finally
         {
@@ -201,7 +222,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             for (NumberTypeT y = TotalArea.Start.Y; y <= TotalArea.End.Y; y += delta)
             {
                 results.Clear();
-                _neuralNetwork!.RunInference(_trainingSession!.InferenceSession, [x, y], results);
+                _neuralNetwork!.RunInference(_networkTrainer!.InferenceBuffer, [x, y], results);
                 if (TrainingHelpers.IsSafeish(results)) vertexes.Add(new Vector2D(x, y));
             }
         }

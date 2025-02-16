@@ -39,10 +39,14 @@
                 <Label Target="SafeAreaText">Safe area*</Label>
                 <TextBox Name="SafeAreaText" Margin="0 2" HorizontalAlignment="Stretch"
                          Text="{Binding SafeArea, Converter={StaticResource AreaConverter}, Mode=TwoWay}" />
-                <Label Target="ActivationFunction">Activation function*</Label>
-                <ComboBox Name="ActivationFunction" Margin="0 2" HorizontalAlignment="Stretch"
+                <Label Target="HiddenActivationFunction">Hidden layers' activation function*</Label>
+                <ComboBox Name="HiddenActivationFunction" Margin="0 2" HorizontalAlignment="Stretch"
                           ItemsSource="{StaticResource ActivationFunctions}"
-                          SelectedItem="{Binding ActivationFunction, Mode=TwoWay}" />
+                          SelectedItem="{Binding HiddenActivationFunction, Mode=TwoWay}" />
+                <Label Target="OutputActivationFunction">Output activation function*</Label>
+                <ComboBox Name="OutputActivationFunction" Margin="0 2" HorizontalAlignment="Stretch"
+                          ItemsSource="{StaticResource ActivationFunctions}"
+                          SelectedItem="{Binding OutputActivationFunction, Mode=TwoWay}" />
                 <Label Target="CostFunction">Cost function*</Label>
                 <ComboBox Name="CostFunction" Margin="0 2" HorizontalAlignment="Stretch"
                           ItemsSource="{StaticResource CostFunctions}"
@@ -51,6 +55,10 @@
                 <NumericUpDown Name="LearningRateText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
                                Maximum="10000" Value="{Binding LearningRate, Mode=TwoWay}"
                                ParsingNumberStyle="AllowDecimalPoint" ClipValueToMinMax="False" />
+                <Label Target="BatchSizeText">Batch size*</Label>
+                <NumericUpDown Name="BatchSizeText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
+                               Maximum="10000" Value="{Binding BatchSize, Mode=TwoWay}"
+                               ParsingNumberStyle="None" ClipValueToMinMax="True" />
                 <Label Target="WeightsMeanText">Weights' Mean*</Label>
                 <NumericUpDown Name="WeightsMeanText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
                                Maximum="10000000" Value="{Binding WeightsMean, Mode=TwoWay}"

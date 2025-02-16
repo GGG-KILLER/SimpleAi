@@ -5,9 +5,9 @@ namespace SimpleAi.UI;
 
 internal static class TrainingHelpers
 {
-    public static ReadOnlyMemory<NumberTypeT> SafeOutput { get; } = (NumberTypeT[]) [1, 0];
+    private static ReadOnlyMemory<NumberTypeT> SafeOutput { get; } = (NumberTypeT[]) [1, 0];
 
-    public static ReadOnlyMemory<NumberTypeT> UnsafeOutput { get; } = (NumberTypeT[]) [0, 1];
+    private static ReadOnlyMemory<NumberTypeT> UnsafeOutput { get; } = (NumberTypeT[]) [0, 1];
 
     public static TrainingDataPoint<NumberTypeT>[] GenerateTrainingData(
         Vector2DRange totalArea,
@@ -66,8 +66,8 @@ internal static class TrainingHelpers
     }
 
     public static double CalculateAccuracy(
-        this INeuralNetwork<NumberTypeT> neuralNetwork,
-        InferenceSession<NumberTypeT>    inferenceSession,
+        this NeuralNetwork<NumberTypeT>  neuralNetwork,
+        InferenceBuffer<NumberTypeT>     inferenceBuffer,
         TrainingDataPoint<NumberTypeT>[] checkDataPoints)
     {
         var               hits   = 0;
@@ -75,7 +75,7 @@ internal static class TrainingHelpers
 
         foreach (TrainingDataPoint<NumberTypeT> point in checkDataPoints)
         {
-            neuralNetwork.RunInference(inferenceSession, point.Inputs.Span, output);
+            neuralNetwork.RunInference(inferenceBuffer, point.Inputs.Span, output);
             // ReSharper disable once CompareOfFloatsByEqualityOperator (These comparisons don't have that risk)
             if (IsSafe(point.ExpectedOutputs.Span))
             {
