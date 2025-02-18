@@ -136,6 +136,90 @@ internal static partial class MathEx
     }
 
     [SkipLocalsInit]
+    public static void Ternary<T, TOp>(T left, ReadOnlySpan<T> middles, ReadOnlySpan<T> rights, Span<T> outputs)
+        where TOp : struct, ITernaryOp<T>
+    {
+        Debug.Assert(middles.Length == rights.Length, message: "All inputs must be the same size.");
+        Debug.Assert(middles.Length <= outputs.Length, message: "Output must have enough space to store results.");
+        Debug.Assert(InputOutputSpanNonOverlapping(middles, outputs));
+        Debug.Assert(InputOutputSpanNonOverlapping(rights, outputs));
+
+        var idx = 0;
+
+        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && middles.Length > Vector<T>.Count)
+        {
+            Vector<T> vecLeft = Vector.Create(left);
+            for (; idx < middles.Length - Vector<T>.Count; idx += Vector<T>.Count)
+            {
+                Vector<T> middle = Vector.LoadUnsafe(ref middles.UnsafeIndex(idx));
+                Vector<T> right  = Vector.LoadUnsafe(ref rights.UnsafeIndex(idx));
+                TOp.Execute(vecLeft, middle, right).StoreUnsafe(ref outputs.UnsafeIndex(idx));
+            }
+        }
+
+        for (; idx < middles.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = TOp.Execute(left, middles.UnsafeIndex(idx), rights.UnsafeIndex(idx));
+        }
+    }
+
+    [SkipLocalsInit]
+    public static void Ternary<T, TOp>(ReadOnlySpan<T> lefts, T middle, ReadOnlySpan<T> rights, Span<T> outputs)
+        where TOp : struct, ITernaryOp<T>
+    {
+        Debug.Assert(lefts.Length == rights.Length, message: "All inputs must be the same size.");
+        Debug.Assert(lefts.Length <= outputs.Length, message: "Output must have enough space to store results.");
+        Debug.Assert(InputOutputSpanNonOverlapping(lefts, outputs));
+        Debug.Assert(InputOutputSpanNonOverlapping(rights, outputs));
+
+        var idx = 0;
+
+        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && lefts.Length > Vector<T>.Count)
+        {
+            Vector<T> vecMiddle = Vector.Create(middle);
+            for (; idx < lefts.Length - Vector<T>.Count; idx += Vector<T>.Count)
+            {
+                Vector<T> left  = Vector.LoadUnsafe(ref lefts.UnsafeIndex(idx));
+                Vector<T> right = Vector.LoadUnsafe(ref rights.UnsafeIndex(idx));
+                TOp.Execute(left, vecMiddle, right).StoreUnsafe(ref outputs.UnsafeIndex(idx));
+            }
+        }
+
+        for (; idx < lefts.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = TOp.Execute(lefts.UnsafeIndex(idx), middle, rights.UnsafeIndex(idx));
+        }
+    }
+
+    [SkipLocalsInit]
+    public static void Ternary<T, TOp>(ReadOnlySpan<T> lefts, ReadOnlySpan<T> middles, T right, Span<T> outputs)
+        where TOp : struct, ITernaryOp<T>
+    {
+        Debug.Assert(lefts.Length == middles.Length, message: "All inputs must be the same size.");
+        Debug.Assert(lefts.Length <= outputs.Length, message: "Output must have enough space to store results.");
+        Debug.Assert(InputOutputSpanNonOverlapping(lefts, outputs));
+        Debug.Assert(InputOutputSpanNonOverlapping(middles, outputs));
+
+        var idx = 0;
+
+        if (Vector.IsHardwareAccelerated && Vector<T>.IsSupported && lefts.Length > Vector<T>.Count)
+        {
+            Vector<T> vecRight = Vector.Create(right);
+            for (; idx < lefts.Length - Vector<T>.Count; idx += Vector<T>.Count)
+            {
+                Vector<T> left   = Vector.LoadUnsafe(ref lefts.UnsafeIndex(idx));
+                Vector<T> middle = Vector.LoadUnsafe(ref middles.UnsafeIndex(idx));
+                TOp.Execute(left, middle, vecRight).StoreUnsafe(ref outputs.UnsafeIndex(idx));
+            }
+        }
+
+        for (; idx < lefts.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = TOp.Execute(lefts.UnsafeIndex(idx), middles.UnsafeIndex(idx), right);
+        }
+    }
+
+    [SkipLocalsInit]
     public static T Aggregate<T, TUnOp, TAggOp>(ReadOnlySpan<T> inputs)
         where TUnOp : struct, IUnOp<T> where TAggOp : struct, IAggOp<T>
     {
