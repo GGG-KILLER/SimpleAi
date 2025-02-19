@@ -40,6 +40,12 @@ public interface INetworkTrainer<T> where T : unmanaged, INumber<T>
     ReadOnlySpan<TrainingDataPoint<T>> CurrentBatch { get; }
 
     /// <summary>
+    /// The current training epoch.
+    /// </summary>
+    [PublicAPI]
+    double Epoch { get; }
+
+    /// <summary>
     /// Returns the average cost for all training data.
     /// </summary>
     /// <returns>The average cost for all training data.</returns>
@@ -155,9 +161,13 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     public int BatchSize { get; }
 
     /// <inheritdoc />
+    [PublicAPI]
+    public double Epoch => _iteration / (double) BatchSize;
+
+    /// <inheritdoc />
     public ReadOnlySpan<TrainingDataPoint<T>> CurrentBatch
-        => _trainingDataPoints.AsSpan()[(_iteration * BatchSize)..System.Math.Min(
-                                            _iteration * BatchSize + BatchSize,
+        => _trainingDataPoints.AsSpan()[((_iteration % _batchCount) * BatchSize)..System.Math.Min(
+                                            (_iteration % _batchCount) * BatchSize + BatchSize,
                                             _trainingDataPoints.Length)];
 
     /// <inheritdoc />
@@ -260,8 +270,8 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
                 BatchSize != _trainingDataPoints.Length ? learnRate / T.CreateSaturating(_batchCount) : learnRate);
         }
 
-        _iteration = (_iteration + 1) % _batchCount;
-        if (_iteration == 0 && _shuffleDataPoints) Random.Shared.Shuffle(_trainingDataPoints);
+        _iteration += 1;
+        if (_iteration % BatchSize == 0 && _shuffleDataPoints) Random.Shared.Shuffle(_trainingDataPoints);
     }
 
     private readonly struct LayerData(
