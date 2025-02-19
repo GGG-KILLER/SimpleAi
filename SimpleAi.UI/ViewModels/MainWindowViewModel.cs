@@ -112,9 +112,9 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                                                s_hiddenLayersSplitters,
                                                StringSplitOptions.RemoveEmptyEntries
                                                | StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)
-                                           .Append(element: 2).ToArray();
+                                           .ToArray();
 
-            var layers = new List<Layer<NumberTypeT>>(layerSizes.Length);
+            var layers = new List<Layer<NumberTypeT>>(layerSizes.Length + 1);
             for (var idx = 0; idx < layerSizes.Length; idx++)
             {
                 int inputs  = idx == 0 ? 2 : layerSizes[idx - 1];
@@ -126,6 +126,23 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                         ActivationFunction.Sigmoid => new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(inputs, outputs),
                         ActivationFunction.TanH => new Layer<NumberTypeT, TanH<NumberTypeT>>(inputs, outputs),
                         ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(inputs, outputs),
+                        _ => throw new InvalidOperationException("Invalid activation function."),
+                    });
+            }
+
+            // Create output layer
+            {
+                int outputLayerInputs = layerSizes.Length > 0 ? layerSizes[^1] : 2;
+                layers.Add(
+                    OutputActivationFunction switch
+                    {
+                        ActivationFunction.ReLU => new Layer<NumberTypeT, ReLU<NumberTypeT>>(outputLayerInputs, 2),
+                        ActivationFunction.Sigmoid =>
+                            new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(outputLayerInputs, 2),
+                        ActivationFunction.TanH => new Layer<NumberTypeT, TanH<NumberTypeT>>(outputLayerInputs, 2),
+                        ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(
+                            outputLayerInputs,
+                            2),
                         _ => throw new InvalidOperationException("Invalid activation function."),
                     });
             }
