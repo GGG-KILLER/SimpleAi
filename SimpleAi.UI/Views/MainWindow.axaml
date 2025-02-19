@@ -15,7 +15,7 @@
         <vm:MainWindowViewModel />
     </Window.DataContext>
 
-    <Grid ColumnDefinitions="Auto, Auto, *, Auto, Auto" RowDefinitions="*, Auto">
+    <Grid ColumnDefinitions="Auto, Auto, *, Auto" RowDefinitions="*, Auto">
         <ScrollViewer Grid.Column="0" Grid.Row="0" Grid.RowSpan="2">
             <StackPanel Margin="0 0 10 0">
                 <StackPanel.Resources>
@@ -82,11 +82,14 @@
         </ScrollViewer>
         <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="10 0 0 0" Background="LightGray"
                       ResizeDirection="Columns" />
-        <sp:AvaPlot Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="3" Margin="0 0 0 5" Name="Plot" />
-        <Button Grid.Row="1" Grid.Column="3" Name="StartTrainingButton" Margin="0 0 5 0"
-                Command="{Binding StartTrainingCommand}">
-            Start
-        </Button>
-        <Button Grid.Row="1" Grid.Column="4" Name="StopTrainingButton" Command="{Binding StartTrainingCancelCommand}">Stop</Button>
+        <sp:AvaPlot Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2" Margin="0 0 0 5" Name="Plot" />
+        <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal" Spacing="5">
+            <Button Name="StartTrainingButton" Command="{Binding StartTrainingCommand}">Start</Button>
+            <Button Name="SaveModelButton" Command="{Binding SaveModelCommand}"
+                    CommandParameter="{Binding $parent[Window]}">
+                Save
+            </Button>
+            <Button Name="StopTrainingButton" Command="{Binding StartTrainingCancelCommand}">Stop</Button>
+        </StackPanel>
     </Grid>
 </Window>

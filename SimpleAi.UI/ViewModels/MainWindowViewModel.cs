@@ -3,12 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MIConvexHull;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
 using ScottPlot;
 using ScottPlot.AxisLimitManagers;
 using ScottPlot.Plottables;
+using SimpleAi.UI.IO;
 using SimpleAi.UI.Maths;
 
 namespace SimpleAi.UI.ViewModels;
@@ -17,8 +22,9 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 {
     private static readonly char[] s_hiddenLayersSplitters = [',', ';', ':'];
 
-    private NeuralNetwork<NumberTypeT>?   _neuralNetwork;
-    private INetworkTrainer<NumberTypeT>? _networkTrainer;
+    private readonly SemaphoreSlim                 _neuralNetworkSemaphore = new(1, 1);
+    private          NeuralNetwork<NumberTypeT>?   _neuralNetwork;
+    private          INetworkTrainer<NumberTypeT>? _networkTrainer;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
@@ -185,7 +191,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             costPlot.LegendText            = "Cost (should go down ideally)";
             costPlot.ManageAxisLimits      = true;
             costPlot.AxisManager           = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
-            costPlot.Add(iterations, _networkTrainer.CalculateTotalAverageCost());
+            costPlot.Add(iterations, _networkTrainer.CalculateAverageCost());
 
             DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
             accuracyPlot.Axes.XAxis = AccuracyPlot.Axes.Bottom;
@@ -201,9 +207,18 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                _networkTrainer.RunTrainingIteration(LearningRate);
+                try
+                {
+                    await _neuralNetworkSemaphore.WaitAsync(cancellationToken)
+                                                 .ConfigureAwait(continueOnCapturedContext: false);
+                    _networkTrainer.RunTrainingIteration(LearningRate);
+                }
+                finally
+                {
+                    _neuralNetworkSemaphore.Release();
+                }
                 iterations++;
-                costPlot.Add(iterations, _networkTrainer.CalculateTotalAverageCost());
+                costPlot.Add(iterations, _networkTrainer.CalculateAverageCost());
                 accuracyPlot.Add(
                     iterations,
                     _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
@@ -252,5 +267,76 @@ internal sealed partial class MainWindowViewModel : ObservableObject
         Console.WriteLine(
             $"Error generating convex hull: {result.Outcome} | {result.ErrorMessage} (points: {string.Join(", ", vertexes)})");
         return [];
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = false, FlowExceptionsToTaskScheduler = true)]
+    private async Task SaveModelAsync(Window window, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (_neuralNetwork is null)
+            {
+                var msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    "No Network Under Training!",
+                    "Please start training a network to save it.",
+                    ButtonEnum.Ok,
+                    Icon.Error);
+                await msgBox.ShowAsPopupAsync(window).ConfigureAwait(continueOnCapturedContext: false);
+                return;
+            }
+            using var file = await window.StorageProvider.SaveFilePickerAsync(
+                                 new FilePickerSaveOptions
+                                 {
+                                     Title            = "Save AI Model",
+                                     DefaultExtension = ".sai.nn",
+                                     FileTypeChoices =
+                                     [
+                                         new FilePickerFileType("Neural Network Model")
+                                         {
+                                             Patterns = ["*.sai.nn"]
+                                         },
+                                     ],
+                                     ShowOverwritePrompt = true,
+                                 }).ConfigureAwait(continueOnCapturedContext: false);
+            if (file is null)
+            {
+                var msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    "No File Selected!",
+                    "Please select a file to save your model.",
+                    ButtonEnum.Ok,
+                    Icon.Error);
+                await msgBox.ShowAsPopupAsync(window).ConfigureAwait(continueOnCapturedContext: false);
+                return;
+            }
+
+            await using (var stream = await file.OpenWriteAsync().ConfigureAwait(continueOnCapturedContext: false))
+            {
+                try
+                {
+                    await _neuralNetworkSemaphore.WaitAsync(cancellationToken)
+                                                 .ConfigureAwait(continueOnCapturedContext: false);
+                    await ModelSerializer.SaveModelAsync(_neuralNetwork, stream)
+                                         .ConfigureAwait(continueOnCapturedContext: false);
+                }
+                finally
+                {
+                    _neuralNetworkSemaphore.Release();
+                }
+            }
+
+            {
+                var msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    "Model Saved!",
+                    $"Model successfully saved to {file.Name}.",
+                    ButtonEnum.Ok,
+                    Icon.Success);
+                await msgBox.ShowAsPopupAsync(window).ConfigureAwait(continueOnCapturedContext: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            throw;
+        }
     }
 }
