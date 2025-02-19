@@ -19,7 +19,7 @@ using SimpleAi.UI.Plotting;
 
 namespace SimpleAi.UI.ViewModels;
 
-internal sealed partial class MainWindowViewModel : ObservableObject
+internal sealed partial class FruitTrainingViewModel : ObservableObject
 {
     private static readonly char[] s_hiddenLayersSplitters = [',', ';', ':'];
 

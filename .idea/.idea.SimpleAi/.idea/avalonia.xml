@@ -5,6 +5,7 @@
       <map>
         <entry key="SimpleAi.UI/App.axaml" value="SimpleAi.UI/SimpleAi.UI.csproj" />
         <entry key="SimpleAi.UI/MainWindow.axaml" value="SimpleAi.UI/SimpleAi.UI.csproj" />
+        <entry key="SimpleAi.UI/Views/FruitTraining.axaml" value="SimpleAi.UI/SimpleAi.UI.csproj" />
         <entry key="SimpleAi.UI/Views/MainWindow.axaml" value="SimpleAi.UI/SimpleAi.UI.csproj" />
       </map>
     </option>
