@@ -11,10 +11,10 @@ using MIConvexHull;
 using MsBox.Avalonia;
 using MsBox.Avalonia.Enums;
 using ScottPlot;
-using ScottPlot.AxisLimitManagers;
 using ScottPlot.Plottables;
 using SimpleAi.UI.IO;
 using SimpleAi.UI.Maths;
+using SimpleAi.UI.Plotting;
 
 namespace SimpleAi.UI.ViewModels;
 
@@ -107,11 +107,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 static x => new Coordinates(x.Inputs.Span[index: 0], x.Inputs.Span[index: 1])).ToArray();
             TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
             TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
-            TrainingDataPlot.Axes.SetLimits(
-                TotalArea.Start.X - 5,
-                TotalArea.End.X + 5,
-                TotalArea.Start.Y - 5,
-                TotalArea.End.Y + 5);
+            TrainingDataPlot.Axes.AutoScale();
             Refresh!();
 
             int[] layerSizes = HiddenLayers.Split(
@@ -177,7 +173,6 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             CostPlot!.Clear();
             AccuracyPlot!.Clear();
-            var iterations = 0;
 
             var safeArea = ConvexHull();
             Polygon safeAreaPolygon = TrainingDataPlot.Add.Polygon(
@@ -190,17 +185,17 @@ internal sealed partial class MainWindowViewModel : ObservableObject
             costPlot.Axes.XAxis.Label.Text = "Generation";
             costPlot.LegendText            = "Cost (should go down ideally)";
             costPlot.ManageAxisLimits      = true;
-            costPlot.AxisManager           = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
-            costPlot.Add(iterations, _networkTrainer.CalculateAverageCost());
+            costPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
+            costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
 
             DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
-            accuracyPlot.Axes.XAxis = AccuracyPlot.Axes.Bottom;
+            accuracyPlot.Axes.XAxis            = AccuracyPlot.Axes.Bottom;
             accuracyPlot.Axes.XAxis.Label.Text = "Generation";
-            accuracyPlot.LegendText = "Accuracy (should go up ideally)";
-            accuracyPlot.ManageAxisLimits = true;
-            accuracyPlot.AxisManager = new Slide { PaddingFractionX = 0, PaddingFractionY = 0.25, Width = 100 };
+            accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
+            accuracyPlot.ManageAxisLimits      = true;
+            accuracyPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
             accuracyPlot.Add(
-                iterations,
+                _networkTrainer.Epoch,
                 _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
 
             Refresh!();
@@ -217,10 +212,9 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                 {
                     _neuralNetworkSemaphore.Release();
                 }
-                iterations++;
-                costPlot.Add(iterations, _networkTrainer.CalculateAverageCost());
+                costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
                 accuracyPlot.Add(
-                    iterations,
+                    _networkTrainer.Epoch,
                     _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
 
                 if (iterations % 100 == 0)
@@ -229,6 +223,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                     safeAreaPolygon.UpdateCoordinates(
                         safeArea.Select(static vec => new Coordinates(vec.X, vec.Y)).ToArray());
                 }
+
                 Refresh!();
             }
         }
