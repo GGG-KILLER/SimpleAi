@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,10 +46,10 @@ internal sealed partial class MainWindowViewModel : ObservableObject
     public partial CostFunction CostFunction { get; set; } = CostFunction.MeanSquaredError;
 
     [ObservableProperty]
-    public partial NumberTypeT LearningRate { get; set; } = 0.25f;
+    public partial NumberTypeT LearningRate { get; set; } = 0.05f;
 
     [ObservableProperty]
-    public partial int BatchSize { get; set; } = 0;
+    public partial int BatchSize { get; set; } = 20;
 
     // ReSharper disable once RedundantDefaultMemberInitializer (It's better to be explicit in this case)
     [ObservableProperty]
@@ -200,6 +201,7 @@ internal sealed partial class MainWindowViewModel : ObservableObject
 
             Refresh!();
 
+            Stopwatch sw = Stopwatch.StartNew();
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -217,8 +219,10 @@ internal sealed partial class MainWindowViewModel : ObservableObject
                     _networkTrainer.Epoch,
                     _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
 
-                if (iterations % 100 == 0)
+                if (sw.ElapsedMilliseconds >= 100)
                 {
+                    sw.Restart();
+
                     safeArea = ConvexHull();
                     safeAreaPolygon.UpdateCoordinates(
                         safeArea.Select(static vec => new Coordinates(vec.X, vec.Y)).ToArray());
