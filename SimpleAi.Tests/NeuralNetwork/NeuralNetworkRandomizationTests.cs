@@ -14,7 +14,7 @@ public class NeuralNetworkRandomizationTests
 
         foreach (var layer in network.Layers)
         {
-            Assert.True(layer.Weights.IndexOfAnyExceptInRange(20, 30) == -1);
+            Assert.True(layer.Weights.AsSpan().IndexOfAnyExceptInRange(20, 30) == -1);
         }
     }
 }

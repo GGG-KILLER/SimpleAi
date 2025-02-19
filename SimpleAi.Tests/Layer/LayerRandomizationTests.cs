@@ -12,7 +12,7 @@ public class LayerRandomizationTests
 
         layer.RandomizeWeights(mean: 25, stdDev: 5);
 
-        Assert.True(layer.Weights.IndexOfAnyExceptInRange(20, 30) == -1);
+        Assert.True(layer.Weights.AsSpan().IndexOfAnyExceptInRange(20, 30) == -1);
     }
 
     [Fact(Skip = "TODO: Fix normal distribution")]
@@ -22,6 +22,6 @@ public class LayerRandomizationTests
 
         layer.RandomizeWeights(mean: 25, stdDev: 5);
 
-        Assert.True(layer.Weights.IndexOfAnyExceptInRange(20, 30) == -1);
+        Assert.True(layer.Weights.AsSpan().IndexOfAnyExceptInRange(20, 30) == -1);
     }
 }
