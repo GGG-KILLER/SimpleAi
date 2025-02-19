@@ -89,59 +89,27 @@ public abstract class Layer<T> where T : unmanaged, INumber<T>
     ///     </list>
     /// </exception>
     [PublicAPI]
-    public abstract void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs);
+    public virtual void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs) => RunInferenceCore(inputs, outputs);
 
     /// <summary>
-    /// Calculates the cost gradients for this layer.
+    /// Runs the inference process storing the activation inputs if provided storage for it.
     /// </summary>
-    /// <param name="averageCostFunction">The function to call to obtain the average cost of the network.</param>
-    /// <param name="originalCost">The original cost before any modifications.</param>
-    /// <param name="weightGradientCosts">The buffer where to store the cost gradients for the weights.</param>
-    /// <param name="biasGradientCosts">The buffer where to store the cost gradients for the biases.</param>
+    /// <param name="inputs">The inputs to run inference on.</param>
+    /// <param name="outputs">The buffer to store inference results on.</param>
+    /// <param name="activationInputs">
+    /// The <paramref name="outputs"/> but without the activation function executed on them.
+    /// </param>
+    [PublicAPI]
+    protected internal abstract void RunInferenceCore(
+        ReadOnlySpan<T> inputs,
+        Span<T>         outputs,
+        Span<T>         activationInputs = default);
+
+    /// <summary>
+    /// Calculates the partial derivatives for the activation.
+    /// </summary>
     [SkipLocalsInit, PublicAPI]
-    protected internal virtual void CalculateCostGradients(
-        Func<T> averageCostFunction,
-        T       originalCost,
-        Span<T> weightGradientCosts,
-        Span<T> biasGradientCosts)
-    {
-        Debug.Assert(weightGradientCosts.Length == MutWeights.Length);
-        Debug.Assert(biasGradientCosts.Length == MutBiases.Length);
-
-        T delta;
-        if (typeof(T) == typeof(Half) || typeof(T) == typeof(double) || typeof(T) == typeof(float))
-            delta = T.CreateChecked(value: 0.0001);
-        else
-            delta = T.CreateChecked(value: 1);
-
-        ref T weightsStart = ref MutWeights.Ref();
-        ref T weight       = ref weightsStart;
-        ref T weightsEnd   = ref Unsafe.Add(ref weightsStart, MutWeights.Length);
-        while (Unsafe.IsAddressLessThan(ref weight, ref weightsEnd))
-        {
-            weight += delta;
-            T deltaCost = averageCostFunction() - originalCost;
-            weight -= delta;
-            weightGradientCosts.UnsafeIndex(
-                (int) Unsafe.ByteOffset(ref weightsStart, ref weight) / Unsafe.SizeOf<T>()) = deltaCost / delta;
-
-            weight = ref Unsafe.Add(ref weight, elementOffset: 1);
-        }
-
-        ref T biasesStart = ref MutBiases.Ref();
-        ref T bias        = ref biasesStart;
-        ref T biasesEnd   = ref Unsafe.Add(ref biasesStart, MutBiases.Length);
-        while (Unsafe.IsAddressLessThan(ref bias, ref biasesEnd))
-        {
-            bias += delta;
-            T deltaCost = averageCostFunction() - originalCost;
-            bias -= delta;
-            biasGradientCosts.UnsafeIndex((int) Unsafe.ByteOffset(ref biasesStart, ref bias) / Unsafe.SizeOf<T>()) =
-                deltaCost / delta;
-
-            bias = ref Unsafe.Add(ref bias, elementOffset: 1);
-        }
-    }
+    protected internal abstract void CalculateActivationDerivatives(ReadOnlySpan<T> weightedInputs, Span<T> outputs);
 
     /// <summary>
     /// Applies the supplied cost gradients to the weights and biases.
@@ -185,8 +153,10 @@ public sealed class Layer<T, TActivation>(int inputCount, int outputCount) : Lay
     where T : unmanaged, INumber<T> where TActivation : IActivationFunction<T>
 {
     /// <inheritdoc />
-    [SkipLocalsInit]
-    public override void RunInference(ReadOnlySpan<T> inputs, Span<T> outputs)
+    protected internal override void RunInferenceCore(
+        ReadOnlySpan<T> inputs,
+        Span<T>         outputs,
+        Span<T>         activationInputs = default)
     {
         if (inputs.Length != Inputs)
             throw new ArgumentException(
@@ -198,6 +168,10 @@ public sealed class Layer<T, TActivation>(int inputCount, int outputCount) : Lay
             throw new ArgumentException(
                 $"Outputs are not the correct size. ({outputs.Length} < {Outputs})",
                 nameof(outputs));
+        if (!activationInputs.IsEmpty && activationInputs.Length < Outputs)
+            throw new ArgumentException(
+                $"Activation inputs are not the correct size. ({activationInputs.Length} < {Outputs})",
+                nameof(activationInputs));
 
         for (var nodeIdx = 0; nodeIdx < Outputs; nodeIdx++)
         {
@@ -206,8 +180,13 @@ public sealed class Layer<T, TActivation>(int inputCount, int outputCount) : Lay
         }
 
         MathEx.Binary<T, AddOp<T>>(outputs, MutBiases, outputs);
+        if (!activationInputs.IsEmpty) outputs.CopyTo(activationInputs);
         TActivation.Activate(outputs, outputs);
     }
+
+    /// <inheritdoc />
+    protected internal override void CalculateActivationDerivatives(ReadOnlySpan<T> weightedInputs, Span<T> outputs)
+        => TActivation.Derivative(weightedInputs, outputs);
 
     /// <summary>
     /// Loads a layer from its weights and biases without doing any validations.

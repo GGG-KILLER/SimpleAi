@@ -40,18 +40,11 @@ public interface INetworkTrainer<T> where T : unmanaged, INumber<T>
     ReadOnlySpan<TrainingDataPoint<T>> CurrentBatch { get; }
 
     /// <summary>
-    /// Returns the average cost for the current training data batch.
+    /// Returns the average cost for all training data.
     /// </summary>
-    /// <returns>The average cost for the current training data batch.</returns>
+    /// <returns>The average cost for all training data.</returns>
     [PublicAPI]
     T CalculateAverageCost();
-
-    /// <summary>
-    /// Returns the average cost for all the training data.
-    /// </summary>
-    /// <returns>The average cost for the network for all the training data.</returns>
-    [PublicAPI]
-    T CalculateTotalAverageCost();
 
     /// <summary>
     /// Executes a single training iteration using the provided learning rate.
@@ -76,11 +69,12 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     where T : unmanaged, INumber<T> where TCost : ICostFunction<T>
 {
     private readonly NeuralNetwork<T>       _network;
-    private readonly bool                   _shuffleDataPoints;
+    private readonly TrainingDataPoint<T>[] _trainingDataPoints;
     private readonly LayerData[]            _layerData;
+    private readonly T[]                    _activationDerivatives, _costDerivatives, _trailingDerivatives;
+    private readonly bool                   _shuffleDataPoints;
     private readonly int                    _batchCount;
     private          int                    _iteration;
-    private readonly TrainingDataPoint<T>[] _trainingDataPoints;
 
     /// <summary>
     /// Initializes a new neural network trainer.
@@ -134,9 +128,18 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         {
             var layer = layers[idx];
             _layerData[idx] = new LayerData(
-                GC.AllocateUninitializedArray<T>(layer.Inputs * layer.Outputs),
-                GC.AllocateUninitializedArray<T>(layer.Outputs));
+                inputs: GC.AllocateUninitializedArray<T>(layer.Inputs),
+                activationInputs: GC.AllocateUninitializedArray<T>(layer.Outputs),
+                weightCostGradients: new Weights<T>(
+                    GC.AllocateUninitializedArray<T>(layer.Inputs * layer.Outputs),
+                    layer.Inputs),
+                biasCostGradients: GC.AllocateUninitializedArray<T>(layer.Outputs));
         }
+
+        int followingDerivativesSize = GradientDescent.GetTrailingDerivativesBufferSize(network);
+        _activationDerivatives = GC.AllocateUninitializedArray<T>(followingDerivativesSize);
+        _costDerivatives       = GC.AllocateUninitializedArray<T>(followingDerivativesSize);
+        _trailingDerivatives   = GC.AllocateUninitializedArray<T>(followingDerivativesSize);
     }
 
     /// <inheritdoc />
@@ -162,7 +165,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     public T CalculateAverageCost()
     {
         T                                  totalCost          = T.AdditiveIdentity;
-        ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints = CurrentBatch;
+        ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints = _trainingDataPoints;
         InferenceBuffer<T>                 inferenceBuffer    = InferenceBuffer;
 
         foreach (TrainingDataPoint<T> point in trainingDataPoints)
@@ -174,52 +177,106 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         return totalCost / T.CreateChecked(trainingDataPoints.Length);
     }
 
-    /// <inheritdoc />
-    [PublicAPI]
-    public T CalculateTotalAverageCost()
+    private void CalculateGradients(TrainingDataPoint<T> trainingDataPoint)
     {
-        T                                  totalCost          = T.AdditiveIdentity;
-        ReadOnlySpan<TrainingDataPoint<T>> trainingDataPoints = _trainingDataPoints.AsSpan();
-        InferenceBuffer<T>                 inferenceBuffer    = InferenceBuffer;
+        ReadOnlySpan<Layer<T>> layers = _network.Layers;
 
-        foreach (TrainingDataPoint<T> point in trainingDataPoints)
+        trainingDataPoint.Inputs.Span.CopyTo(InferenceBuffer.Input);
+        for (var idx = 0; idx < layers.Length; idx++)
         {
-            ReadOnlySpan<T> inference = _network.RunInferenceCore(inferenceBuffer, point.Inputs.Span);
-            totalCost += TCost.Calculate(point.ExpectedOutputs.Span, inference);
+            var layer     = layers.UnsafeIndex(idx);
+            var layerData = _layerData.UnsafeIndex(idx);
+
+            InferenceBuffer.Input[..layer.Inputs].CopyTo(layerData.Inputs);
+            layer.RunInferenceCore(
+                InferenceBuffer.Input[..layer.Inputs],
+                InferenceBuffer.Output[..layer.Outputs],
+                layerData.ActivationInputs);
+            InferenceBuffer.Swap();
+        }
+        InferenceBuffer.Swap(); // Put the output back in its place
+
+        // Update output layer gradients
+        {
+            var outputLayer     = layers.UnsafeIndex(^1);
+            var outputLayerData = _layerData.UnsafeIndex(^1);
+            GradientDescent.CalculateOutputLayerTrailingDerivatives<T, TCost>(
+                outputLayer,
+                trainingDataPoint.ExpectedOutputs.Span,
+                outputLayerData.ActivationInputs,
+                InferenceBuffer.Output[..outputLayer.Outputs],
+                _activationDerivatives,
+                _costDerivatives,
+                _trailingDerivatives);
+            GradientDescent.UpdateLayerGradients(
+                outputLayer,
+                outputLayerData.Inputs,
+                _trailingDerivatives,
+                outputLayerData.WeightCostGradients,
+                outputLayerData.BiasCostGradients);
         }
 
-        return totalCost / T.CreateChecked(trainingDataPoints.Length);
+        // Update hidden layer gradients
+        for (int idx = layers.Length - 2; idx >= 0; idx--)
+        {
+            Layer<T>  layer     = layers.UnsafeIndex(idx);
+            Layer<T>  nextLayer = layers.UnsafeIndex(idx + 1);
+            LayerData layerData = _layerData.UnsafeIndex(idx);
+
+            GradientDescent.CalculateHiddenLayerTrailingDerivatives(
+                layer,
+                nextLayer,
+                layerData.Inputs,
+                layerData.ActivationInputs,
+                _activationDerivatives,
+                _trailingDerivatives);
+
+            GradientDescent.UpdateLayerGradients(
+                layer,
+                layerData.Inputs,
+                _trailingDerivatives,
+                layerData.WeightCostGradients,
+                layerData.BiasCostGradients);
+        }
     }
 
     /// <inheritdoc />
     [PublicAPI]
     public void RunTrainingIteration(T learnRate)
     {
-        ReadOnlySpan<Layer<T>> layers       = _network.Layers;
-        T                      originalCost = CalculateAverageCost();
-
-        Func<T> costFunction = CalculateAverageCost;
-        for (var idx = 0; idx < layers.Length; idx++)
+        foreach (var trainingDataPoint in CurrentBatch)
         {
-            var layer     = layers.UnsafeIndex(idx);
-            var layerData = _layerData[idx];
-            layer.CalculateCostGradients(
-                costFunction,
-                originalCost,
-                layerData.WeightGradientCosts.Span,
-                layerData.BiasGradientCosts.Span);
+            CalculateGradients(trainingDataPoint);
         }
 
+        ReadOnlySpan<Layer<T>> layers = _network.Layers;
         for (var idx = 0; idx < layers.Length; idx++)
         {
             var layer     = layers.UnsafeIndex(idx);
             var layerData = _layerData[idx];
-            layer.ApplyCostGradients(layerData.WeightGradientCosts.Span, layerData.BiasGradientCosts.Span, learnRate);
+            layer.ApplyCostGradients(
+                layerData.WeightCostGradients.AsSpan(),
+                layerData.BiasCostGradients,
+                BatchSize != _trainingDataPoints.Length ? learnRate / T.CreateSaturating(_batchCount) : learnRate);
         }
 
         _iteration = (_iteration + 1) % _batchCount;
         if (_iteration == 0 && _shuffleDataPoints) Random.Shared.Shuffle(_trainingDataPoints);
     }
 
-    private readonly record struct LayerData(Memory<T> WeightGradientCosts, Memory<T> BiasGradientCosts);
+    private readonly struct LayerData(
+        T[]        inputs,
+        T[]        activationInputs,
+        Weights<T> weightCostGradients,
+        T[]        biasCostGradients
+    )
+    {
+        public Span<T> Inputs => inputs.AsSpan();
+
+        public Span<T> ActivationInputs => activationInputs.AsSpan();
+
+        public Weights<T> WeightCostGradients => weightCostGradients;
+
+        public Span<T> BiasCostGradients => biasCostGradients.AsSpan();
+    }
 }
