@@ -33,13 +33,18 @@ public interface ICostFunction<T>
     static abstract void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs);
 }
 
-public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberBase<T> // T.One
+public readonly struct MeanSquaredError<T> : ICostFunction<T>
+    where T : INumberBase<T>,                             // T.CreateSaturating
+    ISubtractionOperators<T, T, T>,                       // SubOp<T>
+    IMultiplyOperators<T, T, T>,                          // Pow2Op<T>
+    IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
+    IDivisionOperators<T, T, T>                           // operator /
 {
     /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        => (T.One / (T.One + T.One))
-           // Pow(actual - expected, 2)
-           * MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected);
+        => // Sum(Pow(actual - expected, 2)) / N
+            MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected)
+            / T.CreateSaturating(actual.Length);
 
     /// <inheritdoc />
     public static void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs)
@@ -47,7 +52,8 @@ public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberB
 }
 
 public readonly struct CrossEntropy<T> : ICostFunction<T>
-    where T : INumberBase<T> /* T.Zero, T.One */, ILogarithmicFunctions<T> /* T.Log */
+    where T : INumberBase<T>, // T.Zero, T.One
+    ILogarithmicFunctions<T>  // T.Log
 {
     /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
