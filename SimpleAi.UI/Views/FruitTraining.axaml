@@ -75,6 +75,9 @@
                 <Label Target="HiddenLayersText">Hidden layers</Label>
                 <TextBox Name="HiddenLayersText" Margin="0 2" HorizontalAlignment="Stretch"
                          Text="{Binding HiddenLayers, Mode=TwoWay}" />
+                <Label Target="UseMultiThreadingCheck">Multithreading?</Label>
+                <CheckBox Name="UseMultiThreadingCheck" Margin="0 2" HorizontalAlignment="Stretch"
+                          IsChecked="{Binding UseMultiThreading, Mode=TwoWay}" />
             </StackPanel>
         </ScrollViewer>
         <GridSplitter Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="10 0 0 0" Background="LightGray"

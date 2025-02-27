@@ -26,6 +26,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
     private readonly SemaphoreSlim                 _neuralNetworkSemaphore = new(1, 1);
     private          NeuralNetwork<NumberTypeT>?   _neuralNetwork;
     private          INetworkTrainer<NumberTypeT>? _networkTrainer;
+    private          InferenceBuffer<NumberTypeT>? _inferenceBuffer;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
@@ -66,6 +67,9 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string HiddenLayers { get; set; } = "10";
+
+    [ObservableProperty]
+    public partial bool UseMultiThreading { get; set; } = true;
 
     public Plot? TrainingDataPlot { get; set; }
 
@@ -155,17 +159,20 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
 
             _networkTrainer = CostFunction switch
             {
-                CostFunction.MeanSquaredError =>
-                    new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
-                        _neuralNetwork,
-                        trainingData,
-                        BatchSize),
+                CostFunction.MeanSquaredError => new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
+                    _neuralNetwork,
+                    trainingData,
+                    BatchSize,
+                    parallelizeTraining: UseMultiThreading),
                 CostFunction.CrossEntropy => new NetworkTrainer<NumberTypeT, CrossEntropy<NumberTypeT>>(
                     _neuralNetwork,
                     trainingData,
-                    BatchSize),
+                    BatchSize,
+                    parallelizeTraining: UseMultiThreading),
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
+
+            _inferenceBuffer = new InferenceBuffer<NumberTypeT>(_neuralNetwork);
 
             CostPlot!.Clear();
             AccuracyPlot!.Clear();
@@ -190,9 +197,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
             accuracyPlot.ManageAxisLimits      = true;
             accuracyPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
-            accuracyPlot.Add(
-                _networkTrainer.Epoch,
-                _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
+            accuracyPlot.Add(_networkTrainer.Epoch, _neuralNetwork.CalculateAccuracy(_inferenceBuffer, trainingData));
 
             Refresh!();
 
@@ -212,7 +217,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
                 accuracyPlot.Add(
                     _networkTrainer.Epoch,
-                    _neuralNetwork.CalculateAccuracy(_networkTrainer.InferenceBuffer, trainingData));
+                    _neuralNetwork.CalculateAccuracy(_inferenceBuffer, trainingData));
 
                 if (sw.ElapsedMilliseconds >= 100)
                 {
@@ -248,7 +253,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             for (NumberTypeT y = TotalArea.Start.Y; y <= TotalArea.End.Y; y += delta)
             {
                 results.Clear();
-                _neuralNetwork!.RunInference(_networkTrainer!.InferenceBuffer, [x, y], results);
+                _neuralNetwork!.RunInference(_inferenceBuffer!, [x, y], results);
                 if (TrainingHelpers.IsSafeish(results)) vertexes.Add(new Vector2D(x, y));
             }
         }
