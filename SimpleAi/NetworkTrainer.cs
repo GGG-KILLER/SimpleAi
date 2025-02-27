@@ -37,6 +37,35 @@ public interface INetworkTrainer<T> where T : unmanaged, INumber<T>
     void RunTrainingIteration(T learnRate);
 }
 
+/// <summary>
+/// Parameters used while training the network.
+/// </summary>
+[PublicAPI]
+public readonly record struct TrainingParameters()
+{
+    /// <summary>
+    /// <para>The size of each mini-batch, if mini-batch training should be used.</para>
+    /// <para>The default is to not use mini-batch training.</para>
+    /// </summary>
+    [PublicAPI]
+    public int? BatchSize { get; init; } = null;
+
+    /// <summary>
+    /// <para>Whether to shuffle the training data after each epoch.</para>
+    /// <para>Default: true</para>
+    /// </summary>
+    [PublicAPI]
+    public bool ShuffleDataAfterEpoch { get; init; } = true;
+
+    /// <summary>
+    /// <para>Whether to run training in parallel using multiple threads.</para>
+    /// <para>Not recommended if your network is small or there isn't much training data in each mini-batch.</para>
+    /// <para>Default: true</para>
+    /// </summary>
+    [PublicAPI]
+    public bool ParallelizeTraining { get; init; } = true;
+}
+
 /// <summary>The class responsible for doing the training for a neural network.</summary>
 /// <typeparam name="T">The number type used by the neural network.</typeparam>
 /// <typeparam name="TCost">The cost function to be used in training.</typeparam>
@@ -62,9 +91,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     /// <summary>Initializes a new neural network trainer.</summary>
     /// <param name="network">The neural network that will be trained.</param>
     /// <param name="trainingData">The training data to be used in training.</param>
-    /// <param name="batchSize">The size of the batch that should be used. Mini-batch mode will be disabled if 0 or negative.</param>
-    /// <param name="shuffleDataPoints">Whether data points should be shuffled after every full training iteration.</param>
-    /// <param name="parallelizeTraining">Whether training for all data points should be executed in parallel.</param>
+    /// <param name="trainingParameters"></param>
     /// <exception cref="ArgumentException">
     ///     <list type="bullet">
     ///         <item>Thrown if the provided network is null.</item>
@@ -73,11 +100,9 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     /// </exception>
     [PublicAPI]
     public NetworkTrainer(
-        NeuralNetwork<T> network,
-        ITrainingData<T> trainingData,
-        int              batchSize           = -1,
-        bool             shuffleDataPoints   = true,
-        bool             parallelizeTraining = true)
+        NeuralNetwork<T>   network,
+        ITrainingData<T>   trainingData,
+        TrainingParameters trainingParameters)
     {
         ArgumentNullException.ThrowIfNull(network);
         ArgumentNullException.ThrowIfNull(trainingData);
@@ -95,22 +120,22 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         }
 
         _network             = network;
-        _shuffleDataPoints   = shuffleDataPoints;
-        _parallelizeTraining = parallelizeTraining;
+        _shuffleDataPoints   = trainingParameters.ShuffleDataAfterEpoch;
+        _parallelizeTraining = trainingParameters.ParallelizeTraining;
         TrainingData         = trainingData;
-        BatchSize            = batchSize <= 0 ? TrainingData.Length : batchSize;
+        BatchSize            = trainingParameters.BatchSize.GetValueOrDefault(TrainingData.Length);
         _batchCount          = MathEx.DivideRoundingUp(TrainingData.Length, BatchSize);
 
         _derivativeArraySize = GradientDescent.GetTrailingDerivativesBufferSize(_network);
         _inferenceBufferPool = new ObjectPool<InferenceBuffer<T>>(
             CreateInferenceBuffer,
-            parallelizeTraining ? Environment.ProcessorCount : 1);
+            trainingParameters.ParallelizeTraining ? Environment.ProcessorCount : 1);
         _layerDataPool = new ObjectPool<LayerInferenceData[]>(
             CreateLayerDataArray,
-            parallelizeTraining ? Environment.ProcessorCount : 1);
+            trainingParameters.ParallelizeTraining ? Environment.ProcessorCount : 1);
         _derivativeArrayPool = new ObjectPool<T[]>(
             CreateDerivativeArray,
-            parallelizeTraining ? Environment.ProcessorCount * 3 : 3);
+            trainingParameters.ParallelizeTraining ? Environment.ProcessorCount * 3 : 3);
 
         ReadOnlySpan<Layer<T>> layers        = _network.Layers;
         var                    costGradients = new LayerCostGradients[layers.Length];
@@ -130,14 +155,10 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     public NetworkTrainer(
         NeuralNetwork<T>                  network,
         IEnumerable<TrainingDataPoint<T>> trainingDataPoints,
-        int                               batchSize           = -1,
-        bool                              shuffleDataPoints   = true,
-        bool                              parallelizeTraining = true) : this(
+        TrainingParameters                trainingParameters) : this(
         network,
         new InMemoryTrainingData<T>(trainingDataPoints ?? throw new ArgumentNullException(nameof(trainingDataPoints))),
-        batchSize,
-        shuffleDataPoints,
-        parallelizeTraining) { }
+        trainingParameters) { }
 
     /// <inheritdoc />
     [PublicAPI]

@@ -162,13 +162,17 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 CostFunction.MeanSquaredError => new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
                     _neuralNetwork,
                     trainingData,
-                    BatchSize,
-                    parallelizeTraining: UseMultiThreading),
+                    new TrainingParameters
+                    {
+                        BatchSize = BatchSize > 0 ? BatchSize : null, ParallelizeTraining = UseMultiThreading,
+                    }),
                 CostFunction.CrossEntropy => new NetworkTrainer<NumberTypeT, CrossEntropy<NumberTypeT>>(
                     _neuralNetwork,
                     trainingData,
-                    BatchSize,
-                    parallelizeTraining: UseMultiThreading),
+                    new TrainingParameters
+                    {
+                        BatchSize = BatchSize > 0 ? BatchSize : null, ParallelizeTraining = UseMultiThreading,
+                    }),
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
 
