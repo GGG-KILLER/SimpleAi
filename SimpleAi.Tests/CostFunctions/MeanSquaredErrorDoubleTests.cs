@@ -22,7 +22,7 @@ public class MeanSquaredErrorDoubleTests
                 double error = costActualOutputs[idx] - costExpectedOutputs[idx];
                 expected += error * error;
             }
-            expected *= 0.5;
+            expected /= inputSize;
 
             double actual = MeanSquaredError<double>.Calculate(costExpectedOutputs, costActualOutputs);
 

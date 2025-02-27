@@ -22,7 +22,7 @@ public class MeanSquaredErrorFloatTests
                 float error = costActualOutputs[idx] - costExpectedOutputs[idx];
                 expected += error * error;
             }
-            expected *= 0.5f;
+            expected /= inputSize;
 
             float actual = MeanSquaredError<float>.Calculate(costActualOutputs, costExpectedOutputs);
 
