@@ -50,6 +50,9 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
     public partial NumberTypeT LearningRate { get; set; } = 0.05f;
 
     [ObservableProperty]
+    public partial NumberTypeT LearningRateDecay { get; set; } = 0.04f;
+
+    [ObservableProperty]
     public partial int BatchSize { get; set; } = 20;
 
     // ReSharper disable once RedundantDefaultMemberInitializer (It's better to be explicit in this case)
@@ -74,6 +77,8 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
     public Plot? TrainingDataPlot { get; set; }
 
     public Plot? CostPlot { get; set; }
+
+    public Plot? LearningRatePlot { get; set; }
 
     public Plot? AccuracyPlot { get; set; }
 
@@ -162,16 +167,22 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 CostFunction.MeanSquaredError => new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
                     _neuralNetwork,
                     trainingData,
-                    new TrainingParameters
+                    new TrainingParameters<NumberTypeT>
                     {
-                        BatchSize = BatchSize > 0 ? BatchSize : null, ParallelizeTraining = UseMultiThreading,
+                        InitialLearnRate    = LearningRate,
+                        LearnRateDecay      = LearningRateDecay,
+                        BatchSize           = BatchSize > 0 ? BatchSize : null,
+                        ParallelizeTraining = UseMultiThreading,
                     }),
                 CostFunction.CrossEntropy => new NetworkTrainer<NumberTypeT, CrossEntropy<NumberTypeT>>(
                     _neuralNetwork,
                     trainingData,
-                    new TrainingParameters
+                    new TrainingParameters<NumberTypeT>
                     {
-                        BatchSize = BatchSize > 0 ? BatchSize : null, ParallelizeTraining = UseMultiThreading,
+                        InitialLearnRate    = LearningRate,
+                        LearnRateDecay      = LearningRateDecay,
+                        BatchSize           = BatchSize > 0 ? BatchSize : null,
+                        ParallelizeTraining = UseMultiThreading,
                     }),
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
@@ -179,6 +190,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             _inferenceBuffer = new InferenceBuffer<NumberTypeT>(_neuralNetwork);
 
             CostPlot!.Clear();
+            LearningRatePlot!.Clear();
             AccuracyPlot!.Clear();
 
             var safeArea = ConvexHull();
@@ -189,15 +201,23 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
 
             DataLogger costPlot = CostPlot.Add.DataLogger();
             costPlot.Axes.XAxis            = CostPlot.Axes.Bottom;
-            costPlot.Axes.XAxis.Label.Text = "Generation";
+            costPlot.Axes.XAxis.Label.Text = "Epoch";
             costPlot.LegendText            = "Cost (should go down ideally)";
             costPlot.ManageAxisLimits      = true;
             costPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
             costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
 
+            DataLogger learningRatePlot = LearningRatePlot.Add.DataLogger();
+            learningRatePlot.Axes.XAxis            = LearningRatePlot.Axes.Bottom;
+            learningRatePlot.Axes.XAxis.Label.Text = "Epoch";
+            learningRatePlot.LegendText            = "Learning rate";
+            learningRatePlot.ManageAxisLimits      = true;
+            learningRatePlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
+            learningRatePlot.Add(_networkTrainer.Epoch, _networkTrainer.LearningRate);
+
             DataLogger accuracyPlot = AccuracyPlot.Add.DataLogger();
             accuracyPlot.Axes.XAxis            = AccuracyPlot.Axes.Bottom;
-            accuracyPlot.Axes.XAxis.Label.Text = "Generation";
+            accuracyPlot.Axes.XAxis.Label.Text = "Epoch";
             accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
             accuracyPlot.ManageAxisLimits      = true;
             accuracyPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
@@ -212,13 +232,14 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 {
                     await _neuralNetworkSemaphore.WaitAsync(cancellationToken)
                                                  .ConfigureAwait(continueOnCapturedContext: false);
-                    _networkTrainer.RunTrainingIteration(LearningRate);
+                    _networkTrainer.RunTrainingIteration();
                 }
                 finally
                 {
                     _neuralNetworkSemaphore.Release();
                 }
                 costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
+                learningRatePlot.Add(_networkTrainer.Epoch, _networkTrainer.LearningRate);
                 accuracyPlot.Add(
                     _networkTrainer.Epoch,
                     _neuralNetwork.CalculateAccuracy(_inferenceBuffer, trainingData));

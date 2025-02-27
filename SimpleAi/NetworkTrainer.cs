@@ -26,41 +26,60 @@ public interface INetworkTrainer<T> where T : unmanaged, INumber<T>
     [PublicAPI]
     double Epoch { get; }
 
+    /// <summary>
+    /// The current learning rate.
+    /// </summary>
+    [PublicAPI]
+    T LearningRate { get; }
+
     /// <summary>Returns the average cost for all training data.</summary>
     /// <returns>The average cost for all training data.</returns>
     [PublicAPI]
     T CalculateAverageCost();
 
     /// <summary>Executes a single training iteration using the provided learning rate.</summary>
-    /// <param name="learnRate">The learning rate to use when training the network.</param>
     [PublicAPI]
-    void RunTrainingIteration(T learnRate);
+    void RunTrainingIteration();
 }
 
-/// <summary>
-/// Parameters used while training the network.
-/// </summary>
+/// <summary>Parameters used while training the network.</summary>
+/// <typeparam name="T">The number type used by the <see cref="NeuralNetwork{T}" />.</typeparam>
 [PublicAPI]
-public readonly record struct TrainingParameters()
+public readonly record struct TrainingParameters<T>()
 {
+    /// <summary>The initial learning rate to use with the network.</summary>
+    [PublicAPI]
+    public required T InitialLearnRate { get; init; }
+
+    /// <summary>Percentage at which the learning rate will be reduced after each epoch (in the 0 to 100 range).</summary>
+    /// <remarks>
+    ///     <para>The learning rate will be <c>100% - (epoch * decay)%</c> at any given point in training.</para>
+    ///     <para>
+    ///         So, for example, if the training is on its 3rd epoch, and the decay is <c>4%</c> per epoch, the learning rate
+    ///         will be <c>92%</c> of the <see cref="InitialLearnRate"/>.
+    ///     </para>
+    /// </remarks>
+    [PublicAPI]
+    public required T LearnRateDecay { get; init; }
+
     /// <summary>
-    /// <para>The size of each mini-batch, if mini-batch training should be used.</para>
-    /// <para>The default is to not use mini-batch training.</para>
+    ///     <para>The size of each mini-batch, if mini-batch training should be used.</para>
+    ///     <para>The default is to not use mini-batch training.</para>
     /// </summary>
     [PublicAPI]
     public int? BatchSize { get; init; } = null;
 
     /// <summary>
-    /// <para>Whether to shuffle the training data after each epoch.</para>
-    /// <para>Default: true</para>
+    ///     <para>Whether to shuffle the training data after each epoch.</para>
+    ///     <para>Default: true</para>
     /// </summary>
     [PublicAPI]
     public bool ShuffleDataAfterEpoch { get; init; } = true;
 
     /// <summary>
-    /// <para>Whether to run training in parallel using multiple threads.</para>
-    /// <para>Not recommended if your network is small or there isn't much training data in each mini-batch.</para>
-    /// <para>Default: true</para>
+    ///     <para>Whether to run training in parallel using multiple threads.</para>
+    ///     <para>Not recommended if your network is small or there isn't much training data in each mini-batch.</para>
+    ///     <para>Default: true</para>
     /// </summary>
     [PublicAPI]
     public bool ParallelizeTraining { get; init; } = true;
@@ -78,14 +97,14 @@ public readonly record struct TrainingParameters()
 public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     where T : unmanaged, INumber<T> where TCost : ICostFunction<T>
 {
+    private readonly MemoryIterator<TrainingDataPoint<T>> _trainingDataBatchIterator = new();
     private readonly int                                  _batchCount, _derivativeArraySize;
     private readonly LayerCostGradients[]                 _costGradients;
     private readonly ObjectPool<T[]>                      _derivativeArrayPool;
     private readonly ObjectPool<InferenceBuffer<T>>       _inferenceBufferPool;
     private readonly ObjectPool<LayerInferenceData[]>     _layerDataPool;
     private readonly NeuralNetwork<T>                     _network;
-    private readonly bool                                 _shuffleDataPoints, _parallelizeTraining;
-    private readonly MemoryIterator<TrainingDataPoint<T>> _trainingDataBatchIterator = new();
+    private readonly TrainingParameters<T>                _trainingParameters;
     private          int                                  _iteration;
 
     /// <summary>Initializes a new neural network trainer.</summary>
@@ -100,9 +119,9 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     /// </exception>
     [PublicAPI]
     public NetworkTrainer(
-        NeuralNetwork<T>   network,
-        ITrainingData<T>   trainingData,
-        TrainingParameters trainingParameters)
+        NeuralNetwork<T>      network,
+        ITrainingData<T>      trainingData,
+        TrainingParameters<T> trainingParameters)
     {
         ArgumentNullException.ThrowIfNull(network);
         ArgumentNullException.ThrowIfNull(trainingData);
@@ -119,12 +138,12 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
                 throw new ArgumentException($"Invalid training data point #{idx}. Output count mismatch.");
         }
 
-        _network             = network;
-        _shuffleDataPoints   = trainingParameters.ShuffleDataAfterEpoch;
-        _parallelizeTraining = trainingParameters.ParallelizeTraining;
-        TrainingData         = trainingData;
-        BatchSize            = trainingParameters.BatchSize.GetValueOrDefault(TrainingData.Length);
-        _batchCount          = MathEx.DivideRoundingUp(TrainingData.Length, BatchSize);
+        _network            = network;
+        _trainingParameters = trainingParameters;
+        TrainingData        = trainingData;
+        BatchSize           = trainingParameters.BatchSize.GetValueOrDefault(TrainingData.Length);
+        LearningRate        = trainingParameters.InitialLearnRate;
+        _batchCount         = MathEx.DivideRoundingUp(TrainingData.Length, BatchSize);
 
         _derivativeArraySize = GradientDescent.GetTrailingDerivativesBufferSize(_network);
         _inferenceBufferPool = new ObjectPool<InferenceBuffer<T>>(
@@ -155,7 +174,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     public NetworkTrainer(
         NeuralNetwork<T>                  network,
         IEnumerable<TrainingDataPoint<T>> trainingDataPoints,
-        TrainingParameters                trainingParameters) : this(
+        TrainingParameters<T>             trainingParameters) : this(
         network,
         new InMemoryTrainingData<T>(trainingDataPoints ?? throw new ArgumentNullException(nameof(trainingDataPoints))),
         trainingParameters) { }
@@ -171,6 +190,10 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
     /// <inheritdoc />
     [PublicAPI]
     public double Epoch => _iteration / (double) BatchSize;
+
+    /// <inheritdoc />
+    [PublicAPI]
+    public T LearningRate { get; private set; }
 
     /// <inheritdoc />
     public ReadOnlyMemory<TrainingDataPoint<T>> CurrentBatch
@@ -197,7 +220,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
 
     /// <inheritdoc />
     [PublicAPI]
-    public void RunTrainingIteration(T learnRate)
+    public void RunTrainingIteration()
     {
         // Clear cost gradients so they don't get interference from other runs.
         foreach (LayerCostGradients costGradient in _costGradients)
@@ -206,7 +229,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
             costGradient.ForBiases.Clear();
         }
 
-        if (_parallelizeTraining)
+        if (_trainingParameters.ParallelizeTraining)
         {
             _trainingDataBatchIterator.Memory = CurrentBatch;
             Parallel.ForEach(
@@ -235,11 +258,18 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
             layer.ApplyCostGradients(
                 costGradients.ForWeights.AsSpan(),
                 costGradients.ForBiases,
-                BatchSize != TrainingData.Length ? learnRate / T.CreateSaturating(_batchCount) : learnRate);
+                BatchSize != TrainingData.Length ? LearningRate / T.CreateSaturating(_batchCount) : LearningRate);
         }
 
         _iteration += 1;
-        if (_iteration % BatchSize == 0 && _shuffleDataPoints) TrainingData.Shuffle();
+
+        (int epoch, int batch) = int.DivRem(_iteration, BatchSize);
+        if (batch == 0)
+        {
+            LearningRate = _trainingParameters.InitialLearnRate
+                           * (T.One / (T.One + _trainingParameters.LearnRateDecay * T.CreateSaturating(epoch)));
+            if (_trainingParameters.ParallelizeTraining) TrainingData.Shuffle();
+        }
     }
 
     private void CalculateGradients(LayerInferenceData[] allLayersData, TrainingDataPoint<T> trainingDataPoint)

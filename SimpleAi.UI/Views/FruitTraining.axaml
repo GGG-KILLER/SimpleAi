@@ -52,6 +52,10 @@
                 <NumericUpDown Name="LearningRateText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
                                Maximum="10000" Value="{Binding LearningRate, Mode=TwoWay}"
                                ParsingNumberStyle="AllowDecimalPoint" ClipValueToMinMax="False" />
+                <Label Target="LearningRateDecayText">Learning rate decay*</Label>
+                <NumericUpDown Name="LearningRateDecayText" Margin="0 2" HorizontalAlignment="Stretch"
+                               Minimum="0.000001" Maximum="10000" Value="{Binding LearningRateDecay, Mode=TwoWay}"
+                               ParsingNumberStyle="AllowDecimalPoint" ClipValueToMinMax="False" />
                 <Label Target="BatchSizeText">Batch size*</Label>
                 <NumericUpDown Name="BatchSizeText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
                                Maximum="10000" Value="{Binding BatchSize, Mode=TwoWay}"
