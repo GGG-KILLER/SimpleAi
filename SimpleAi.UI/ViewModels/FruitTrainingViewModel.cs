@@ -155,11 +155,6 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
 
             _networkTrainer = CostFunction switch
             {
-                CostFunction.NaiveSquaredError =>
-                    new NetworkTrainer<NumberTypeT, NaiveSquaredError<NumberTypeT>>(
-                        _neuralNetwork,
-                        trainingData,
-                        BatchSize),
                 CostFunction.MeanSquaredError =>
                     new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
                         _neuralNetwork,

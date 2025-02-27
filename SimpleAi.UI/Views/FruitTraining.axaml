@@ -24,7 +24,6 @@
                         <ai:ActivationFunction>TanH</ai:ActivationFunction>
                     </scg:List>
                     <scg:List x:Key="CostFunctions" x:TypeArguments="ai:CostFunction">
-                        <ai:CostFunction>NaiveSquaredError</ai:CostFunction>
                         <ai:CostFunction>MeanSquaredError</ai:CostFunction>
                         <ai:CostFunction>CrossEntropy</ai:CostFunction>
                     </scg:List>

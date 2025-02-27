@@ -33,26 +33,6 @@ public interface ICostFunction<T>
     static abstract void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs);
 }
 
-[PublicAPI]
-public readonly struct NaiveSquaredError<T> : ICostFunction<T>
-    where T : ISubtractionOperators<T, T, T>,             // SubOp<T>
-    IMultiplyOperators<T, T, T>,                          // Pow2Op<T>
-    IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>, operator +
-    INumberBase<T>                                        // T.One
-{
-    /// <inheritdoc />
-    [PublicAPI]
-    public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        =>
-            // Pow(actual - expected, 2)
-            MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected);
-
-    /// <inheritdoc />
-    [PublicAPI]
-    public static void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs)
-        => MathEx.Ternary<T, DoubleBinaryOp<T, SubOp<T>, MulOp<T>>>(expected, actual, T.One + T.One, outputs);
-}
-
 public readonly struct MeanSquaredError<T> : ICostFunction<T> where T : INumberBase<T> // T.One
 {
     /// <inheritdoc />
