@@ -292,14 +292,15 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         }
         inferenceBuffer.Swap(); // Put the output back in its place
 
+        T[] trailingDerivatives = _derivativeArrayPool.Rent();
+        Array.Clear(trailingDerivatives);
+
         // Update output layer gradients
         {
             Layer<T>           outputLayer           = layers.UnsafeIndex(^1);
             LayerInferenceData outputLayerData       = allLayersData.UnsafeIndex(^1);
             T[]                activationDerivatives = _derivativeArrayPool.Rent();
             T[]                costDerivatives       = _derivativeArrayPool.Rent();
-            T[]                trailingDerivatives   = _derivativeArrayPool.Rent();
-
             GradientDescent.CalculateOutputLayerTrailingDerivatives<T, TCost>(
                 outputLayer,
                 trainingDataPoint.ExpectedOutputs.Span,
@@ -322,7 +323,6 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
                     outputLayerGradients.ForWeights,
                     outputLayerGradients.ForBiases);
             }
-            _derivativeArrayPool.Return(trailingDerivatives);
         }
 
         // Update hidden layer gradients
@@ -333,7 +333,6 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
             LayerInferenceData layerInferenceData = allLayersData.UnsafeIndex(idx);
 
             T[] activationDerivatives = _derivativeArrayPool.Rent();
-            T[] trailingDerivatives   = _derivativeArrayPool.Rent();
             GradientDescent.CalculateHiddenLayerTrailingDerivatives(
                 layer,
                 nextLayer,
@@ -353,8 +352,9 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
                     layerGradients.ForWeights,
                     layerGradients.ForBiases);
             }
-            _derivativeArrayPool.Return(trailingDerivatives);
         }
+
+        _derivativeArrayPool.Return(trailingDerivatives);
     }
 
     private InferenceBuffer<T> CreateInferenceBuffer() => new(_network);
