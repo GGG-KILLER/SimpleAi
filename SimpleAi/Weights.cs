@@ -1,9 +1,10 @@
-﻿using JetBrains.Annotations;
+﻿using System.Text;
+using JetBrains.Annotations;
 
 namespace SimpleAi;
 
 [PublicAPI]
-public readonly struct Weights<T>
+public readonly struct Weights<T> where T : ISpanFormattable
 {
     private readonly T[] _weights;
 
@@ -37,13 +38,40 @@ public readonly struct Weights<T>
     [PublicAPI]
     public Span<T> AsSpan() => _weights.AsSpan();
 
+    /// <inheritdoc />
+    public override string ToString() => ToString(format: null, formatProvider: null);
+
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer  = stackalloc char[256];
+        var        builder = new StringBuilder("[");
+        builder.AppendLine();
+        for (var nodeIdx = 0; nodeIdx < Nodes; nodeIdx++)
+        {
+            builder.Append("    ");
+            var first = true;
+            foreach (var weight in GetNodeWeights(nodeIdx))
+            {
+                if (!first) builder.Append(", ");
+                first = false;
+
+                if (weight.TryFormat(buffer, out int written, format, formatProvider))
+                    builder.Append(buffer[..written]);
+                else
+                    builder.Append(weight);
+            }
+            builder.AppendLine();
+        }
+        builder.Append(']');
+        return builder.ToString();
+    }
+
     [PublicAPI]
-    public static implicit operator ReadOnlyWeights<T>(Weights<T> weights)
-        => new(weights._weights, weights.Inputs);
+    public static implicit operator ReadOnlyWeights<T>(Weights<T> weights) => new(weights._weights, weights.Inputs);
 }
 
 [PublicAPI]
-public readonly struct ReadOnlyWeights<T>
+public readonly struct ReadOnlyWeights<T> where T : ISpanFormattable
 {
     private readonly T[] _weights;
     private readonly int _inputs;
@@ -77,4 +105,32 @@ public readonly struct ReadOnlyWeights<T>
 
     [PublicAPI]
     public ReadOnlySpan<T> AsSpan() => _weights.AsSpan();
+
+    /// <inheritdoc />
+    public override string ToString() => ToString(format: null, formatProvider: null);
+
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        Span<char> buffer  = stackalloc char[256];
+        var        builder = new StringBuilder("[");
+        builder.AppendLine();
+        for (var nodeIdx = 0; nodeIdx < Nodes; nodeIdx++)
+        {
+            builder.Append("    ");
+            var first = true;
+            foreach (var weight in GetNodeWeights(nodeIdx))
+            {
+                if (!first) builder.Append(", ");
+                first = false;
+
+                if (weight.TryFormat(buffer, out int written, format, formatProvider))
+                    builder.Append(buffer[..written]);
+                else
+                    builder.Append(weight);
+            }
+            builder.AppendLine();
+        }
+        builder.Append(']');
+        return builder.ToString();
+    }
 }
