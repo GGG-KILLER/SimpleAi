@@ -65,45 +65,27 @@ public readonly struct Sigmoid<T> : IActivationFunction<T>
 
 [PublicAPI]
 public readonly struct TanH<T> : IActivationFunction<T>
-    where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
+    where T : INumberBase<T>, // T.One
+    IHyperbolicFunctions<T>   // T.Tanh
 {
     /// <inheritdoc />
     [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+    {
+        for (var idx = 0; idx < inputs.Length; idx++)
+        {
+            outputs.UnsafeIndex(idx) = T.Tanh(inputs.UnsafeIndex(idx));
+        }
+    }
 
     /// <inheritdoc />
     [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
-
-    private readonly struct ActivationOp : IUnOp<T>
     {
-        public static T Execute(T value)
+        for (var idx = 0; idx < inputs.Length; idx++)
         {
-            T exp2 = T.Exp((T.One + T.One) * value);
-            return (exp2 - T.One) / (exp2 + T.One);
-        }
-
-        public static Vector<T> Execute(Vector<T> values)
-        {
-            Vector<T> exp2 = ExpOp<T>.Execute(Vector.Create(T.One + T.One) * values);
-            return (exp2 - Vector<T>.One) / (exp2 + Vector<T>.One);
-        }
-    }
-
-    private readonly struct DerivativeOp : IUnOp<T>
-    {
-        public static T Execute(T value)
-        {
-            T activated = ActivationOp.Execute(value);
-            return T.One - (activated * activated);
-        }
-
-        public static Vector<T> Execute(Vector<T> values)
-        {
-            Vector<T> activated = ActivationOp.Execute(values);
-            return Vector<T>.One - (activated * activated);
+            var x = T.Tanh(inputs.UnsafeIndex(idx));
+            outputs.UnsafeIndex(idx) = T.One - (x * x);
         }
     }
 }
