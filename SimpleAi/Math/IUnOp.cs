@@ -38,3 +38,13 @@ internal readonly struct Pow2Op<T> : IUnOp<T> where T : IMultiplyOperators<T, T,
 
     public static Vector<T> Execute(Vector<T> args) => args * args;
 }
+
+internal readonly struct SigmoidOp<T> : IUnOp<T>
+    where T : INumberBase<T>, IExponentialFunctions<T>, IComparisonOperators<T, T, bool>
+{
+    /// <inheritdoc />
+    public static T Execute(T arg) => MathEx.Sigmoid(arg);
+
+    /// <inheritdoc />
+    public static Vector<T> Execute(Vector<T> args) => MathEx.Sigmoid(args);
+}

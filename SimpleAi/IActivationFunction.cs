@@ -33,40 +33,31 @@ public interface IActivationFunction<T>
 
 [PublicAPI]
 public readonly struct Sigmoid<T> : IActivationFunction<T>
-    where T : INumberBase<T> /* T.One */, IExponentialFunctions<T> // T.Exp
+    where T : INumberBase<T>,         // T.Zero, T.One, operator +, operator /
+    IComparisonOperators<T, T, bool>, // T.Exp
+    IExponentialFunctions<T>          // operator >
 {
     /// <inheritdoc />
     [PublicAPI]
     public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+        => MathEx.Unary<T, SigmoidOp<T>>(inputs, outputs);
 
     /// <inheritdoc />
     [PublicAPI]
     public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
         => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
 
-    private readonly struct ActivationOp : IUnOp<T>
-    {
-        public static T Execute(T value) => T.One / (T.One + T.Exp(-value));
-
-        public static Vector<T> Execute(Vector<T> values)
-        {
-            Vector<T> exp = ExpOp<T>.Execute(-values);
-            return Vector<T>.One / (Vector<T>.One + exp);
-        }
-    }
-
     private readonly struct DerivativeOp : IUnOp<T>
     {
         public static T Execute(T value)
         {
-            T activated = ActivationOp.Execute(value);
+            T activated = MathEx.Sigmoid(value);
             return activated * (T.One - activated);
         }
 
         public static Vector<T> Execute(Vector<T> values)
         {
-            Vector<T> activated = ActivationOp.Execute(values);
+            Vector<T> activated = MathEx.Sigmoid(values);
             return activated * (Vector<T>.One - activated);
         }
     }
