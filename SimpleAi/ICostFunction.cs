@@ -52,8 +52,10 @@ public readonly struct MeanSquaredError<T> : ICostFunction<T>
 }
 
 public readonly struct CrossEntropy<T> : ICostFunction<T>
-    where T : INumberBase<T>, // T.Zero, T.One
-    ILogarithmicFunctions<T>  // T.Log
+    where T : INumber<T>,             // T.Zero, T.One, T.Max, operator +, operator /
+    IComparisonOperators<T, T, bool>, // T.Exp
+    IExponentialFunctions<T>,         // operator >
+    ILogarithmicFunctions<T>          // T.Log
 {
     /// <inheritdoc />
     public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
@@ -65,39 +67,41 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
 
     private readonly struct CrossEntropyLoopOp : IBinOp<T>
     {
-        public static T Execute(T expected, T actual)
+        public static T Execute(T label, T output)
         {
-            T res = expected == T.One ? -T.Log(actual) : -T.Log(T.One - actual);
-            return T.IsNaN(res) ? T.Zero : res;
+            T prediction = MathEx.Sigmoid(output);
+            return label > T.Zero
+                       ? -T.Log(T.Max(prediction, T.CreateSaturating(1e-8)))
+                       : -T.Log(T.Max(T.One - prediction, T.CreateSaturating(1e-8)));
         }
 
-        public static Vector<T> Execute(Vector<T> expected, Vector<T> actual)
+        public static Vector<T> Execute(Vector<T> label, Vector<T> output)
         {
             if (typeof(T) == typeof(float))
             {
-                Vector<float> nlog   = -Vector.Log(actual.As<T, float>());
-                Vector<float> nlogm1 = -Vector.Log(Vector<float>.One - actual.As<T, float>());
-                Vector<float> res = Vector.ConditionalSelect(
-                    Vector.Equals(expected.As<T, float>(), Vector<float>.One),
-                    nlog,
-                    nlogm1);
-                return Vector.ConditionalSelect(Vector.IsNaN(res), Vector<float>.Zero, res).As<float, T>();
+                Vector<T> prediction = MathEx.Sigmoid(output);
+                return Vector.ConditionalSelect(
+                                 Vector.GreaterThan(label.As<T, float>(), Vector<float>.Zero),
+                                 -Vector.Log(Vector.Max(prediction.As<T, float>(), Vector.Create(1e-8f))),
+                                 -Vector.Log(
+                                     Vector.Max(Vector<float>.One - prediction.As<T, float>(), Vector.Create(1e-8f))))
+                             .As<float, T>();
             }
             if (typeof(T) == typeof(double))
             {
-                Vector<double> nlog   = -Vector.Log(actual.As<T, double>());
-                Vector<double> nlogm1 = -Vector.Log(Vector<double>.One - actual.As<T, double>());
-                Vector<double> res = Vector.ConditionalSelect(
-                    Vector.Equals(expected.As<T, double>(), Vector<double>.One),
-                    nlog,
-                    nlogm1);
-                return Vector.ConditionalSelect(Vector.IsNaN(res), Vector<double>.Zero, res).As<double, T>();
+                Vector<T> prediction = MathEx.Sigmoid(output);
+                return Vector.ConditionalSelect(
+                                 Vector.GreaterThan(label.As<T, double>(), Vector<double>.Zero),
+                                 -Vector.Log(Vector.Max(prediction.As<T, double>(), Vector.Create(1e-8))),
+                                 -Vector.Log(
+                                     Vector.Max(Vector<double>.One - prediction.As<T, double>(), Vector.Create(1e-8))))
+                             .As<double, T>();
             }
             else
             {
                 Vector<T> res = Vector<T>.Zero;
                 for (var idx = 0; idx < Vector<T>.Count; idx++)
-                    res = res.WithElement(idx, Execute(expected[idx], actual[idx]));
+                    res = res.WithElement(idx, Execute(label[idx], output[idx]));
                 return res;
             }
         }
@@ -106,20 +110,20 @@ public readonly struct CrossEntropy<T> : ICostFunction<T>
     private readonly struct DerivativeOp : IBinOp<T>
     {
         /// <inheritdoc />
-        public static T Execute(T expected, T actual)
+        public static T Execute(T label, T output)
         {
-            if (actual == T.Zero || actual == T.One) return T.Zero;
-            return (-actual + expected) / (actual * (actual - T.One));
+            T prediction = MathEx.Sigmoid(output);
+            return label > T.Zero ? prediction - T.One : prediction;
         }
 
         /// <inheritdoc />
-        public static Vector<T> Execute(Vector<T> expected, Vector<T> actual)
+        public static Vector<T> Execute(Vector<T> labels, Vector<T> outputs)
         {
-            var derivative = (-actual + expected) / (actual * (actual - Vector<T>.One));
+            Vector<T> predictions = MathEx.Sigmoid(outputs);
             return Vector.ConditionalSelect(
-                Vector.BitwiseOr(Vector.Equals(expected, Vector<T>.Zero), Vector.Equals(expected, Vector<T>.Zero)),
-                Vector<T>.Zero,
-                derivative);
+                Vector.GreaterThan(predictions, Vector<T>.Zero),
+                predictions - Vector<T>.One,
+                predictions);
         }
     }
 }
