@@ -1,3 +1,4 @@
+using System.Numerics.Tensors;
 using JetBrains.Annotations;
 
 namespace SimpleAi.Tests.CostFunctions;
@@ -5,12 +6,11 @@ namespace SimpleAi.Tests.CostFunctions;
 [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public class MeanSquaredErrorFloatTests
 {
-    [Theory]
-    [MemberData(nameof(CostFunctionsTestData.InputSizes), MemberType = typeof(CostFunctionsTestData))]
+    [Theory, MemberData(nameof(CostFunctionsTestData.InputSizes), MemberType = typeof(CostFunctionsTestData))]
     public void MeanSquaredErrorX2ECalculate_Returns_correct_values_for_any_input_size_with_floats(int inputSize)
     {
-        Span<float> costExpectedOutputs = stackalloc float[inputSize];
-        Span<float> costActualOutputs   = stackalloc float[inputSize];
+        Tensor<float> costExpectedOutputs = Tensor.Create<float>([inputSize]);
+        Tensor<float> costActualOutputs   = Tensor.Create<float>([inputSize]);
         for (var iteration = 0; iteration < CostFunctionsTestData.IterationCount; iteration++)
         {
             float expected = 0;

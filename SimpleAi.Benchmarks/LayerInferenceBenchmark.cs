@@ -1,19 +1,21 @@
-﻿using BenchmarkDotNet.Attributes;
+﻿using System.Numerics.Tensors;
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Engines;
+using BenchmarkDotNet.Environments;
+using BenchmarkDotNet.Jobs;
 using JetBrains.Annotations;
 
 namespace SimpleAi.Benchmarks;
 
-[UsedImplicitly(ImplicitUseKindFlags.Access, ImplicitUseTargetFlags.WithMembers)]
-[SimpleJob(RunStrategy.Throughput), MemoryRandomization]
+[UsedImplicitly(ImplicitUseKindFlags.Access, ImplicitUseTargetFlags.WithMembers), Config(typeof(Config))]
 public class LayerInferenceBenchmark
 {
     private double[]?                    _doubleInputs;
-    private Layer<double, ReLU<double>>? _doubleLayer;
-    private double[]?                    _doubleOutputs;
+    private Layer<double, ReLu<double>>? _doubleLayer;
     private float[]?                     _floatInputs;
-    private Layer<float, ReLU<float>>?   _floatLayer;
-    private float[]?                     _floatOutputs;
+    private Layer<float, ReLu<float>>?   _floatLayer;
 
     [Params(5, 10, 250, 5000, 10_000)]
     public int Inputs { get; [UsedImplicitly] set; }
@@ -24,25 +26,34 @@ public class LayerInferenceBenchmark
     [GlobalSetup]
     public void GlobalSetup()
     {
-        _floatLayer = new Layer<float, ReLU<float>>(Inputs, Neurons);
-        _floatLayer.RandomizeWeights(mean: 0, stdDev: 1);
-        _doubleLayer = new Layer<double, ReLU<double>>(Inputs, Neurons);
-        _doubleLayer.RandomizeWeights(mean: 0, stdDev: 1);
+        _floatLayer  = new Layer<float, ReLu<float>>(Inputs, Neurons);
+        _doubleLayer = new Layer<double, ReLu<double>>(Inputs, Neurons);
 
         _floatInputs = new float[Inputs];
         for (var idx = 0; idx < _floatInputs.Length; idx++)
             _floatInputs[idx] = Random.Shared.NextSingle() * Random.Shared.Next();
-        _floatOutputs = new float[Neurons];
 
         _doubleInputs = new double[Inputs];
         for (var idx = 0; idx < _doubleInputs.Length; idx++)
             _doubleInputs[idx] = Random.Shared.NextDouble() * Random.Shared.Next();
-        _doubleOutputs = new double[Neurons];
     }
 
     [Benchmark]
-    public void FloatInfer() => _floatLayer!.RunInference(_floatInputs, _floatOutputs);
+    public Tensor<float> FloatInfer() => _floatLayer!.RunInference(_floatInputs);
 
     [Benchmark]
-    public void DoubleInfer() => _doubleLayer!.RunInference(_doubleInputs, _doubleOutputs);
+    public Tensor<double> DoubleInfer() => _doubleLayer!.RunInference(_doubleInputs);
+
+    private sealed class Config : ManualConfig
+    {
+        public Config()
+        {
+            var job = Job.Default.WithArguments([new MsBuildArgument("/p:NoWarn=SYSLIB5001")])
+                         .WithStrategy(RunStrategy.Throughput).WithMemoryRandomization();
+
+            AddDiagnoser(MemoryDiagnoser.Default);
+
+            AddJob(job.WithRuntime(CoreRuntime.Core90));
+        }
+    }
 }

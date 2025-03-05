@@ -1,129 +1,117 @@
+using System.Diagnostics;
 using System.Numerics;
+using System.Numerics.Tensors;
 using JetBrains.Annotations;
-using SimpleAi.Math;
 
 namespace SimpleAi;
 
-/// <summary>
-/// The interface for cost (also known as loss) functions.
-/// </summary>
+/// <summary>The interface for cost (also known as loss) functions.</summary>
 /// <typeparam name="T">The numeric type accepted by the cost function.</typeparam>
 [PublicAPI]
 public interface ICostFunction<T>
 {
     /// <summary>
-    /// Calculates the cost of the neural network based on the <paramref name="expected"/> outputs and the
-    /// <paramref name="actual"/> inputs.
+    ///     Calculates the cost of the neural network based on the <paramref name="expected" /> outputs and the
+    ///     <paramref name="actual" /> inputs.
     /// </summary>
     /// <param name="expected">The inputs that were expected to be returned by the neural network.</param>
     /// <param name="actual">The inputs that were actually obtained when executing the inference.</param>
     /// <returns>The current cost of the neural network.</returns>
     [PublicAPI]
-    static abstract T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual);
+    static abstract T Calculate(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual);
 
     /// <summary>
-    /// Calculates the derivative of the cost function at the provided <paramref name="expected"/> and <paramref name="actual"/>
-    /// inputs and stores them on the <paramref name="outputs"/>.
+    ///     Calculates the derivative of the cost function at the provided <paramref name="expected" /> and
+    ///     <paramref name="actual" /> inputs.
     /// </summary>
     /// <param name="expected">The inputs that were expected to be returned by the neural network.</param>
     /// <param name="actual">The inputs that were actually obtained when executing the inference.</param>
-    /// <param name="outputs">The results of the derivative calculation.</param>
-    /// <returns></returns>
+    /// <returns>The results of executing the derivative.</returns>
     [PublicAPI]
-    static abstract void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs);
+    static abstract Tensor<T> Derivative(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual);
 }
 
 public readonly struct MeanSquaredError<T> : ICostFunction<T>
-    where T : INumberBase<T>,                             // T.CreateSaturating
-    ISubtractionOperators<T, T, T>,                       // SubOp<T>
-    IMultiplyOperators<T, T, T>,                          // Pow2Op<T>
-    IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
-    IDivisionOperators<T, T, T>                           // operator /
+    where T : ISubtractionOperators<T, T, T>,                   // Tensor.Subtract
+    IMultiplyOperators<T, T, T>, IMultiplicativeIdentity<T, T>, // Tensor.Multiply
+    IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>,       // Tensor.Sum
+    INumber<T>                                                  // T.CreateSaturating
 {
     /// <inheritdoc />
-    public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        => // Sum(Pow(actual - expected, 2)) / N
-            MathEx.Aggregate<T, BinaryUnaryPipeline<T, SubOp<T>, Pow2Op<T>>, AddOp<T>>(actual, expected)
-            / T.CreateSaturating(actual.Length);
+    public static T Calculate(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual)
+    {
+        if (!expected.Lengths.SequenceEqual(actual.Lengths))
+            throw new ArgumentException(message: "Lengths of both input tensors don't match.");
+
+        Tensor<T> error = Tensor.Subtract(actual, expected);
+        return Tensor.Sum<T>(Tensor.Multiply<T>(error, error)) / T.CreateSaturating(actual.FlattenedLength);
+    }
 
     /// <inheritdoc />
-    public static void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs)
-        => MathEx.Binary<T, SubOp<T>>(actual, expected, outputs);
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual)
+    {
+        if (!expected.Lengths.SequenceEqual(actual.Lengths))
+            throw new ArgumentException(message: "Lengths of both input tensors don't match.");
+        return Tensor.Subtract(actual, expected);
+    }
 }
 
 public readonly struct CrossEntropy<T> : ICostFunction<T>
-    where T : INumber<T>,             // T.Zero, T.One, T.Max, operator +, operator /
-    IComparisonOperators<T, T, bool>, // T.Exp
-    IExponentialFunctions<T>,         // operator >
-    ILogarithmicFunctions<T>          // T.Log
+    where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, // T.AdditiveIdentity, operator +
+    ILogarithmicFunctions<T>,                                       // T.Log
+    INumberBase<T>,                                                 // T.One, T.Zero, T.IsNaN
+    IEqualityOperators<T, T, bool>                                  // operator ==
 {
     /// <inheritdoc />
-    public static T Calculate(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual)
-        => MathEx.Aggregate<T, CrossEntropyLoopOp, AddOp<T>>(expected, actual);
-
-    /// <inheritdoc />
-    public static void Derivative(ReadOnlySpan<T> expected, ReadOnlySpan<T> actual, Span<T> outputs)
-        => MathEx.Binary<T, DerivativeOp>(expected, actual, outputs);
-
-    private readonly struct CrossEntropyLoopOp : IBinOp<T>
+    public static T Calculate(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual)
     {
-        public static T Execute(T label, T output)
+        if (!expected.Lengths.SequenceEqual(actual.Lengths))
+            throw new ArgumentException(message: "Lengths of both input tensors don't match.");
+
+        var cost               = T.AdditiveIdentity;
+        var expectedEnumerator = expected.GetEnumerator();
+        var actualEnumerator   = actual.GetEnumerator();
+
+        while (expectedEnumerator.MoveNext())
         {
-            T prediction = MathEx.Sigmoid(output);
-            return label > T.Zero
-                       ? -T.Log(T.Max(prediction, T.CreateSaturating(1e-8)))
-                       : -T.Log(T.Max(T.One - prediction, T.CreateSaturating(1e-8)));
+            bool moved = actualEnumerator.MoveNext();
+            Debug.Assert(moved);
+
+            var x = actualEnumerator.Current;
+            var y = expectedEnumerator.Current;
+            var v = y == T.One ? -T.Log(x) : -T.Log(T.One - x);
+            cost += T.IsNaN(v) ? T.Zero : v;
         }
 
-        public static Vector<T> Execute(Vector<T> label, Vector<T> output)
-        {
-            if (typeof(T) == typeof(float))
-            {
-                Vector<T> prediction = MathEx.Sigmoid(output);
-                return Vector.ConditionalSelect(
-                                 Vector.GreaterThan(label.As<T, float>(), Vector<float>.Zero),
-                                 -Vector.Log(Vector.Max(prediction.As<T, float>(), Vector.Create(1e-8f))),
-                                 -Vector.Log(
-                                     Vector.Max(Vector<float>.One - prediction.As<T, float>(), Vector.Create(1e-8f))))
-                             .As<float, T>();
-            }
-            if (typeof(T) == typeof(double))
-            {
-                Vector<T> prediction = MathEx.Sigmoid(output);
-                return Vector.ConditionalSelect(
-                                 Vector.GreaterThan(label.As<T, double>(), Vector<double>.Zero),
-                                 -Vector.Log(Vector.Max(prediction.As<T, double>(), Vector.Create(1e-8))),
-                                 -Vector.Log(
-                                     Vector.Max(Vector<double>.One - prediction.As<T, double>(), Vector.Create(1e-8))))
-                             .As<double, T>();
-            }
-            else
-            {
-                Vector<T> res = Vector<T>.Zero;
-                for (var idx = 0; idx < Vector<T>.Count; idx++)
-                    res = res.WithElement(idx, Execute(label[idx], output[idx]));
-                return res;
-            }
-        }
+        return cost;
     }
 
-    private readonly struct DerivativeOp : IBinOp<T>
+    /// <inheritdoc />
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> expected, in ReadOnlyTensorSpan<T> actual)
     {
-        /// <inheritdoc />
-        public static T Execute(T label, T output)
+        if (!expected.Lengths.SequenceEqual(actual.Lengths))
+            throw new ArgumentException(message: "Lengths of both input tensors don't match.");
+
+        var outputs            = Tensor.Create<T>(actual.Lengths);
+        var expectedEnumerator = expected.GetEnumerator();
+        var actualEnumerator   = actual.GetEnumerator();
+        var outputsEnumerator  = outputs.AsTensorSpan().GetEnumerator();
+
+        while (expectedEnumerator.MoveNext())
         {
-            T prediction = MathEx.Sigmoid(output);
-            return label > T.Zero ? prediction - T.One : prediction;
+            bool actualMoved = actualEnumerator.MoveNext();
+            Debug.Assert(actualMoved);
+            bool outputsMoved = outputsEnumerator.MoveNext();
+            Debug.Assert(outputsMoved);
+
+            var x = actualEnumerator.Current;
+            var y = expectedEnumerator.Current;
+            if (x == T.Zero || x == T.One)
+                outputsEnumerator.Current = T.Zero;
+            else
+                outputsEnumerator.Current = (-x + y) / (x * (x - T.One));
         }
 
-        /// <inheritdoc />
-        public static Vector<T> Execute(Vector<T> labels, Vector<T> outputs)
-        {
-            Vector<T> predictions = MathEx.Sigmoid(outputs);
-            return Vector.ConditionalSelect(
-                Vector.GreaterThan(predictions, Vector<T>.Zero),
-                predictions - Vector<T>.One,
-                predictions);
-        }
+        return outputs;
     }
 }

@@ -19,9 +19,10 @@
                 <StackPanel.Resources>
                     <scg:List x:Key="ActivationFunctions" x:TypeArguments="ai:ActivationFunction">
                         <ai:ActivationFunction>Sigmoid</ai:ActivationFunction>
-                        <ai:ActivationFunction>ReLU</ai:ActivationFunction>
-                        <ai:ActivationFunction>SoftMax</ai:ActivationFunction>
                         <ai:ActivationFunction>TanH</ai:ActivationFunction>
+                        <ai:ActivationFunction>ReLu</ai:ActivationFunction>
+                        <ai:ActivationFunction>SiLu</ai:ActivationFunction>
+                        <ai:ActivationFunction>SoftMax</ai:ActivationFunction>
                     </scg:List>
                     <scg:List x:Key="CostFunctions" x:TypeArguments="ai:CostFunction">
                         <ai:CostFunction>MeanSquaredError</ai:CostFunction>

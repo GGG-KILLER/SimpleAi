@@ -1,156 +1,149 @@
-using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics;
 using System.Numerics;
+using System.Numerics.Tensors;
 using JetBrains.Annotations;
-using SimpleAi.Math;
 
 namespace SimpleAi;
 
-/// <summary>
-/// The interface for activation functions.
-/// </summary>
+/// <summary>The interface for activation functions.</summary>
 /// <typeparam name="T">The numeric type accepted by the activation function.</typeparam>
 [PublicAPI]
 public interface IActivationFunction<T>
 {
-    /// <summary>
-    /// Executes the activation function on a set of <paramref name="inputs"/>, storing its result in the
-    /// <paramref name="outputs"/> buffer.
-    /// </summary>
+    /// <summary>Executes the activation function on a set of <paramref name="inputs" />, return its results.</summary>
     /// <param name="inputs">The inputs to the activation function.</param>
-    /// <param name="outputs">The buffer to store the outputs for each input on.</param>
+    /// <returns>The activated results.</returns>
     [PublicAPI]
-    static abstract void Activate(ReadOnlySpan<T> inputs, Span<T> outputs);
+    static abstract Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs);
 
     /// <summary>
-    /// Runs the provided input <paramref name="values"/> through the derivative of the activation function, storing its
-    /// results in the <paramref name="outputs"/> buffer.
+    ///     Runs the provided input <paramref name="inputs" /> through the derivative of the activation function,
+    ///     returning its results.
     /// </summary>
-    /// <param name="values">The values to pass through the derivative of the activation function.</param>
-    /// <param name="outputs">The buffer where the results of the derivative will be stored.</param>
+    /// <param name="inputs">The inputs to pass through the derivative of the activation function.</param>
+    /// <returns>The derivative of the activation function.</returns>
     [PublicAPI]
-    static abstract void Derivative(ReadOnlySpan<T> values, Span<T> outputs);
+    static abstract Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs);
 }
 
+/// <summary>
+///     <c>S(x) = 1 / (1 + exp(-x))</c>
+/// </summary>
+/// <typeparam name="T"></typeparam>
 [PublicAPI]
-public readonly struct Sigmoid<T> : IActivationFunction<T>
-    where T : INumberBase<T>,         // T.Zero, T.One, operator +, operator /
-    IComparisonOperators<T, T, bool>, // T.Exp
-    IExponentialFunctions<T>          // operator >
+public readonly struct Sigmoid<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
 {
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, SigmoidOp<T>>(inputs, outputs);
+    public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs) => Tensor.Sigmoid(inputs);
 
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
-
-    private readonly struct DerivativeOp : IUnOp<T>
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
     {
-        public static T Execute(T value)
-        {
-            T activated = MathEx.Sigmoid(value);
-            return activated * (T.One - activated);
-        }
-
-        public static Vector<T> Execute(Vector<T> values)
-        {
-            Vector<T> activated = MathEx.Sigmoid(values);
-            return activated * (Vector<T>.One - activated);
-        }
+        Tensor<T> activated = Activate(inputs);
+        return Tensor.Multiply<T>(activated, Tensor.Subtract(T.One, activated));
     }
 }
 
+/// <summary>
+///     <c>T(x) = (x^2 - 1)/(x^2 + 1)</c>
+/// </summary>
+/// <typeparam name="T"></typeparam>
 [PublicAPI]
-public readonly struct TanH<T> : IActivationFunction<T>
+public readonly struct TanH<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
+{
+    /// <inheritdoc />
+    public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs)
+    {
+        Tensor<T> e2 = Tensor.Exp<T>(Tensor.Multiply(inputs, T.One + T.One));
+        return Tensor.Divide<T>(Tensor.Subtract(e2, T.One), Tensor.Add(e2, T.One));
+    }
+
+    /// <inheritdoc />
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
+    {
+        Tensor<T> x = Activate(inputs);
+        return Tensor.Subtract(T.One, Tensor.Multiply<T>(x, x));
+    }
+}
+
+/// <summary>
+///     <c>R(x) = max(x, 0)</c>
+/// </summary>
+/// <typeparam name="T"></typeparam>
+[PublicAPI]
+public readonly struct ReLu<T> : IActivationFunction<T> where T : INumber<T> // Tensor.Max, T.Zero, T.One, operator >
+{
+    /// <inheritdoc />
+    public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs) => Tensor.Max(inputs, T.Zero);
+
+    /// <inheritdoc />
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
+    {
+        Tensor<T> outputs = Tensor.Create<T>(inputs.Lengths);
+        {
+            TensorSpan<T>.Enumerator         outputsEnumerator = outputs.AsTensorSpan().GetEnumerator();
+            ReadOnlyTensorSpan<T>.Enumerator inputsEnumerator  = inputs.GetEnumerator();
+            while (inputsEnumerator.MoveNext())
+            {
+                bool moved = outputsEnumerator.MoveNext();
+                Debug.Assert(moved);
+                outputsEnumerator.Current = inputsEnumerator.Current > T.Zero ? T.One : T.Zero;
+            }
+        }
+        return outputs;
+    }
+}
+
+/// <summary>
+///     <c>S(x) = x / (1 + exp(-x))</c>
+/// </summary>
+/// <typeparam name="T"></typeparam>
+[PublicAPI]
+public readonly struct SiLu<T> : IActivationFunction<T>
     where T : INumberBase<T>, // T.One
-    IHyperbolicFunctions<T>   // T.Tanh
+    IExponentialFunctions<T>  // Tensor.Exp 
 {
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
+    public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs)
     {
-        for (var idx = 0; idx < inputs.Length; idx++)
-        {
-            outputs.UnsafeIndex(idx) = T.Tanh(inputs.UnsafeIndex(idx));
-        }
+        Tensor<T> one = Tensor.Create<T>(inputs.Lengths);
+        one.Fill(T.One);
+
+        // inputs / (1 + exp(-inputs))
+        return Tensor.Divide(inputs, Tensor.Add<T>(one, Tensor.Exp<T>(Tensor.Negate(inputs))));
     }
 
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
     {
-        for (var idx = 0; idx < inputs.Length; idx++)
-        {
-            var x = T.Tanh(inputs.UnsafeIndex(idx));
-            outputs.UnsafeIndex(idx) = T.One - (x * x);
-        }
+        Tensor<T> one = Tensor.Create<T>(inputs.Lengths);
+        one.Fill(T.One);
+
+        Tensor<T> sig = Activate(inputs);
+        // inputs * sig * (1 - sig) + sig
+        return Tensor.Add<T>(Tensor.Multiply<T>(Tensor.Multiply(inputs, sig), Tensor.Subtract<T>(one, sig)), sig);
     }
 }
 
+/// <summary>
+///     <c>S(x) = exp(x)/sum(exp(x))</c>
+/// </summary>
+/// <typeparam name="T"></typeparam>
 [PublicAPI]
-[SuppressMessage(category: "ReSharper", checkId: "InconsistentNaming", Justification = "Name of algorithm.")]
-public readonly struct ReLU<T> : IActivationFunction<T> where T : INumber<T> // T.Zero, T.Max
+public readonly struct SoftMax<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
 {
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, ActivationOp>(inputs, outputs);
+    public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs) => Tensor.SoftMax(inputs);
 
     /// <inheritdoc />
-    [PublicAPI]
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
-        => MathEx.Unary<T, DerivativeOp>(inputs, outputs);
-
-    private readonly struct ActivationOp : IUnOp<T>
+    public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
     {
-        public static T Execute(T value) => T.Max(T.Zero, value);
+        Tensor<T> exp    = Tensor.Exp(inputs);
+        var       expSum = Tensor.Sum<T>(exp);
 
-        public static Vector<T> Execute(Vector<T> values) => Vector.Max(Vector<T>.Zero, values);
-    }
-
-    private readonly struct DerivativeOp : IUnOp<T>
-    {
-        public static T Execute(T value) => value > T.Zero ? T.One : T.Zero;
-
-        public static Vector<T> Execute(Vector<T> values)
-            => Vector.ConditionalSelect(Vector.GreaterThan(values, Vector<T>.Zero), Vector<T>.One, Vector<T>.Zero);
-    }
-}
-
-[PublicAPI]
-public readonly struct SoftMax<T> : IActivationFunction<T>
-    where T : IExponentialFunctions<T>,                   // T.Exp
-    IAdditiveIdentity<T, T>, IAdditionOperators<T, T, T>, // AddOp<T>
-    IDivisionOperators<T, T, T>,                          // DivOp<T>, LastDerivativeStep (operator /)
-    ISubtractionOperators<T, T, T>,                       // LastDerivativeStep (operator -)
-    IMultiplyOperators<T, T, T>                           // LastDerivativeStep (operator *)
-{
-    /// <inheritdoc />
-    [PublicAPI]
-    public static void Activate(ReadOnlySpan<T> inputs, Span<T> outputs)
-    {
-        MathEx.Unary<T, ExpOp<T>>(inputs, outputs);
-        T expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
-        MathEx.Binary<T, DivOp<T>>(outputs, expSum, outputs);
-    }
-
-    /// <inheritdoc />
-    [PublicAPI]
-    public static void Derivative(ReadOnlySpan<T> inputs, Span<T> outputs)
-    {
-        MathEx.Unary<T, ExpOp<T>>(inputs, outputs);
-        T expSum = MathEx.Aggregate<T, Identity<T>, AddOp<T>>(outputs);
-        MathEx.Binary<T, LastDerivativeStep>(outputs, expSum, outputs);
-    }
-
-    private readonly struct LastDerivativeStep : IBinOp<T>
-    {
-        public static T Execute(T exp, T expSum) => ((exp * expSum) - (exp * exp)) / (expSum * expSum);
-
-        public static Vector<T> Execute(Vector<T> exp, Vector<T> expSum)
-            => ((exp * expSum) - (exp * exp)) / (expSum * expSum);
+        // (exp * expSum - exp * exp) / (expSum * expSum)
+        return Tensor.Divide(
+            Tensor.Subtract<T>(Tensor.Multiply(exp, expSum), Tensor.Multiply<T>(exp, exp)),
+            expSum * expSum);
     }
 }

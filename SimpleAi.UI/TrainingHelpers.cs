@@ -1,13 +1,14 @@
 using System;
+using System.Numerics.Tensors;
 using SimpleAi.UI.Maths;
 
 namespace SimpleAi.UI;
 
 internal static class TrainingHelpers
 {
-    private static ReadOnlyMemory<NumberTypeT> SafeOutput { get; } = (NumberTypeT[]) [1, 0];
+    private static NumberTypeT[] SafeOutput { get; } = [1, 0];
 
-    private static ReadOnlyMemory<NumberTypeT> UnsafeOutput { get; } = (NumberTypeT[]) [0, 1];
+    private static NumberTypeT[] UnsafeOutput { get; } = [0, 1];
 
     public static TrainingDataPoint<NumberTypeT>[] GenerateTrainingData(
         Vector2DRange totalArea,
@@ -15,10 +16,9 @@ internal static class TrainingHelpers
         int           unsafePoints,
         int           safePoints)
     {
-        var trainingData       = new TrainingDataPoint<NumberTypeT>[safePoints + unsafePoints];
-        var trainingDataInputs = new NumberTypeT[(safePoints + unsafePoints) * 2];
-        var generatedSafe      = 0;
-        var generatedUnsafe    = 0;
+        var trainingData    = new TrainingDataPoint<NumberTypeT>[safePoints + unsafePoints];
+        var generatedSafe   = 0;
+        var generatedUnsafe = 0;
 
         for (var idx = 0; idx < trainingData.Length; idx++)
         {
@@ -28,38 +28,33 @@ internal static class TrainingHelpers
             else
                 isSafe = generatedSafe < safePoints;
 
+            NumberTypeT[] inputs = new NumberTypeT[2];
             if (isSafe)
             {
-                trainingDataInputs[(idx * 2) + 0] = (NumberTypeT) (safeArea.Start.X
-                                                                   + (Random.Shared.NextDouble()
-                                                                      * (safeArea.End.X - safeArea.Start.X)));
-                trainingDataInputs[(idx * 2) + 1] = (NumberTypeT) (safeArea.Start.Y
-                                                                   + (Random.Shared.NextDouble()
-                                                                      * (safeArea.End.Y - safeArea.Start.Y)));
+                inputs[0] = (NumberTypeT) (safeArea.Start.X
+                                           + (Random.Shared.NextDouble() * (safeArea.End.X - safeArea.Start.X)));
+                inputs[1] = (NumberTypeT) (safeArea.Start.Y
+                                           + (Random.Shared.NextDouble() * (safeArea.End.Y - safeArea.Start.Y)));
                 generatedSafe++;
             }
             else
             {
             regen:
-                trainingDataInputs[(idx * 2) + 0] = (NumberTypeT) (totalArea.Start.X
-                                                                   + (Random.Shared.NextDouble()
-                                                                      * (totalArea.End.X - totalArea.Start.X)));
-                trainingDataInputs[(idx * 2) + 1] = (NumberTypeT) (totalArea.Start.Y
-                                                                   + (Random.Shared.NextDouble()
-                                                                      * (totalArea.End.Y - totalArea.Start.Y)));
+                inputs[0] = (NumberTypeT) (totalArea.Start.X
+                                           + (Random.Shared.NextDouble() * (totalArea.End.X - totalArea.Start.X)));
+                inputs[1] = (NumberTypeT) (totalArea.Start.Y
+                                           + (Random.Shared.NextDouble() * (totalArea.End.Y - totalArea.Start.Y)));
 
-                if (safeArea.Start.X < trainingDataInputs[(idx * 2) + 0]
-                    && trainingDataInputs[(idx * 2) + 0] < safeArea.End.X
-                    && safeArea.Start.Y < trainingDataInputs[(idx * 2) + 1]
-                    && trainingDataInputs[(idx * 2) + 1] < safeArea.End.Y)
+                if (safeArea.Start.X < inputs[0]
+                    && inputs[0] < safeArea.End.X
+                    && safeArea.Start.Y < inputs[1]
+                    && inputs[1] < safeArea.End.Y)
                     goto regen;
 
                 generatedUnsafe++;
             }
 
-            trainingData[idx] = new TrainingDataPoint<NumberTypeT>(
-                trainingDataInputs.AsMemory(idx * 2, length: 2),
-                isSafe ? SafeOutput : UnsafeOutput);
+            trainingData[idx] = new TrainingDataPoint<NumberTypeT>(inputs, isSafe ? SafeOutput : UnsafeOutput);
         }
 
         return trainingData;
@@ -67,33 +62,20 @@ internal static class TrainingHelpers
 
     public static double CalculateAccuracy(
         this NeuralNetwork<NumberTypeT>  neuralNetwork,
-        InferenceBuffer<NumberTypeT>     inferenceBuffer,
         TrainingDataPoint<NumberTypeT>[] checkDataPoints)
     {
-        var               hits   = 0;
-        Span<NumberTypeT> output = stackalloc NumberTypeT[2];
+        var hits = 0;
 
         foreach (TrainingDataPoint<NumberTypeT> point in checkDataPoints)
         {
-            neuralNetwork.RunInference(inferenceBuffer, point.Inputs.Span, output);
-            // ReSharper disable once CompareOfFloatsByEqualityOperator (These comparisons don't have that risk)
-            if (IsSafe(point.ExpectedOutputs.Span))
-            {
-                if (IsSafeish(output)) hits++;
-            }
-            else
-            {
-                if (IsUnsafeish(output)) hits++;
-            }
+            var outputs = neuralNetwork.RunInference(point.Inputs);
+
+            if (Tensor.IndexOfMax<NumberTypeT>(point.ExpectedOutputs) == Tensor.IndexOfMax<NumberTypeT>(outputs))
+                hits++;
         }
 
         return (double) hits / checkDataPoints.Length;
     }
 
-    // ReSharper disable once CompareOfFloatsByEqualityOperator
-    public static bool IsSafe(this ReadOnlySpan<NumberTypeT> outputs) => outputs[0] == 1 && outputs[1] == 0;
-
-    public static bool IsSafeish(this ReadOnlySpan<NumberTypeT> outputs) => outputs[0] > outputs[1];
-
-    public static bool IsUnsafeish(this ReadOnlySpan<NumberTypeT> outputs) => outputs[0] < outputs[1];
+    public static bool IsSafeish(in ReadOnlyTensorSpan<NumberTypeT> outputs) => outputs[0] > outputs[1];
 }

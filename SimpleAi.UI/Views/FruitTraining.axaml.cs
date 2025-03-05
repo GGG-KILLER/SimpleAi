@@ -30,12 +30,10 @@ public partial class FruitTraining : UserControl
         const int columns = 3;
         var       layout  = new CustomGrid();
         // TODO: Fix this when ScottPlot has a fixed version (colSpan and rowSpan are switched around).
-        layout.Set(
-            vm.TrainingDataPlot,
-            new GridCell(rowIndex: 0, colIndex: 0, rowCount: rows, colCount: columns, rowSpan: columns));
-        layout.Set(vm.CostPlot, new GridCell(rowIndex: 1, colIndex: 0, rowCount: rows, colCount: columns));
-        layout.Set(vm.LearningRatePlot, new GridCell(rowIndex: 1, colIndex: 1, rowCount: rows, colCount: columns));
-        layout.Set(vm.AccuracyPlot, new GridCell(rowIndex: 1, colIndex: 2, rowCount: rows, colCount: columns));
+        layout.Set(vm.TrainingDataPlot, new GridCell(rowIndex: 0, colIndex: 0, rows, columns, columns));
+        layout.Set(vm.CostPlot, new GridCell(rowIndex: 1, colIndex: 0, rows, columns));
+        layout.Set(vm.LearningRatePlot, new GridCell(rowIndex: 1, colIndex: 1, rows, columns));
+        layout.Set(vm.AccuracyPlot, new GridCell(rowIndex: 1, colIndex: 2, rows, columns));
         multiPlot.Layout = layout;
     }
 }

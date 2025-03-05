@@ -35,7 +35,7 @@ internal sealed class MemoryIterator<T> : IEnumerable<T>
         public readonly T Current
             => _index >= 0
                    ? memory.Span[_index]
-                   : throw new InvalidOperationException("Enumerator has not been initialized.");
+                   : throw new InvalidOperationException(message: "Enumerator has not been initialized.");
 
         /// <inheritdoc />
         readonly object? IEnumerator.Current => Current;

@@ -7,6 +7,9 @@
         <OutputType>Exe</OutputType>
         <IsPackable>false</IsPackable>
 
+        <!-- Tensor library is experimental. -->
+        <NoWarn>SYSLIB5001</NoWarn>
+
         <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
         <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     </PropertyGroup>

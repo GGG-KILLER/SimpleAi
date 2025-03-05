@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MIConvexHull;
 using MsBox.Avalonia;
+using MsBox.Avalonia.Base;
 using MsBox.Avalonia.Enums;
 using ScottPlot;
 using ScottPlot.Plottables;
@@ -23,28 +25,27 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
 {
     private static readonly char[] s_hiddenLayersSplitters = [',', ';', ':'];
 
-    private readonly SemaphoreSlim                 _neuralNetworkSemaphore = new(1, 1);
-    private          NeuralNetwork<NumberTypeT>?   _neuralNetwork;
+    private readonly SemaphoreSlim                 _neuralNetworkSemaphore = new(initialCount: 1, maxCount: 1);
     private          INetworkTrainer<NumberTypeT>? _networkTrainer;
-    private          InferenceBuffer<NumberTypeT>? _inferenceBuffer;
+    private          NeuralNetwork<NumberTypeT>?   _neuralNetwork;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(StartTrainingCommand))]
     public partial bool IsTraining { get; private set; }
 
     [ObservableProperty]
-    public partial Vector2DRange TotalArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(9, 14));
+    public partial Vector2DRange TotalArea { get; set; } = new(new Vector2D(X: 0, Y: 0), new Vector2D(X: 9, Y: 14));
 
     [ObservableProperty]
-    public partial Vector2DRange SafeArea { get; set; } = new(new Vector2D(0, 0), new Vector2D(5.5f, 8));
+    public partial Vector2DRange SafeArea { get; set; } = new(new Vector2D(X: 0, Y: 0), new Vector2D(X: 5.5f, Y: 8));
 
     [ObservableProperty]
-    public partial ActivationFunction HiddenActivationFunction { get; set; } = ActivationFunction.Sigmoid;
+    public partial ActivationFunction HiddenActivationFunction { get; set; } = ActivationFunction.ReLu;
 
     [ObservableProperty]
-    public partial ActivationFunction OutputActivationFunction { get; set; } = ActivationFunction.Sigmoid;
+    public partial ActivationFunction OutputActivationFunction { get; set; } = ActivationFunction.SoftMax;
 
     [ObservableProperty]
-    public partial CostFunction CostFunction { get; set; } = CostFunction.MeanSquaredError;
+    public partial CostFunction CostFunction { get; set; } = CostFunction.CrossEntropy;
 
     [ObservableProperty]
     public partial NumberTypeT LearningRate { get; set; } = 0.05f;
@@ -72,7 +73,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
     public partial string HiddenLayers { get; set; } = "10";
 
     [ObservableProperty]
-    public partial bool UseMultiThreading { get; set; } = true;
+    public partial bool UseMultiThreading { get; set; } = false;
 
     public Plot? TrainingDataPlot { get; set; }
 
@@ -109,12 +110,12 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             TrainingDataPlot!.Clear();
             Coordinates[] safeDataPoints = trainingData.Where(
                 // ReSharper disable once CompareOfFloatsByEqualityOperator
-                static x => x.ExpectedOutputs.Span[index: 0] == 1 && x.ExpectedOutputs.Span[index: 1] == 0).Select(
-                static x => new Coordinates(x.Inputs.Span[index: 0], x.Inputs.Span[index: 1])).ToArray();
+                static x => x.ExpectedOutputs[0] == 1 && x.ExpectedOutputs[1] == 0).Select(
+                static x => new Coordinates(x.Inputs[0], x.Inputs[1])).ToArray();
             Coordinates[] unsafeDataPoints = trainingData.Where(
                 // ReSharper disable once CompareOfFloatsByEqualityOperator
-                static x => x.ExpectedOutputs.Span[index: 0] == 0 && x.ExpectedOutputs.Span[index: 1] == 1).Select(
-                static x => new Coordinates(x.Inputs.Span[index: 0], x.Inputs.Span[index: 1])).ToArray();
+                static x => x.ExpectedOutputs[0] == 0 && x.ExpectedOutputs[1] == 1).Select(
+                static x => new Coordinates(x.Inputs[0], x.Inputs[1])).ToArray();
             TrainingDataPlot.Add.ScatterPoints(safeDataPoints, Colors.Green);
             TrainingDataPlot.Add.ScatterPoints(unsafeDataPoints, Colors.Red);
             TrainingDataPlot.Axes.AutoScale();
@@ -134,11 +135,12 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 layers.Add(
                     HiddenActivationFunction switch
                     {
-                        ActivationFunction.ReLU => new Layer<NumberTypeT, ReLU<NumberTypeT>>(inputs, outputs),
                         ActivationFunction.Sigmoid => new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(inputs, outputs),
                         ActivationFunction.TanH => new Layer<NumberTypeT, TanH<NumberTypeT>>(inputs, outputs),
+                        ActivationFunction.ReLu => new Layer<NumberTypeT, ReLu<NumberTypeT>>(inputs, outputs),
+                        ActivationFunction.SiLu => new Layer<NumberTypeT, SiLu<NumberTypeT>>(inputs, outputs),
                         ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(inputs, outputs),
-                        _ => throw new InvalidOperationException("Invalid activation function."),
+                        _ => throw new InvalidOperationException(message: "Invalid activation function."),
                     });
             }
 
@@ -148,19 +150,22 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 layers.Add(
                     OutputActivationFunction switch
                     {
-                        ActivationFunction.ReLU => new Layer<NumberTypeT, ReLU<NumberTypeT>>(outputLayerInputs, 2),
                         ActivationFunction.Sigmoid =>
-                            new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(outputLayerInputs, 2),
-                        ActivationFunction.TanH => new Layer<NumberTypeT, TanH<NumberTypeT>>(outputLayerInputs, 2),
+                            new Layer<NumberTypeT, Sigmoid<NumberTypeT>>(outputLayerInputs, neurons: 2),
+                        ActivationFunction.TanH =>
+                            new Layer<NumberTypeT, TanH<NumberTypeT>>(outputLayerInputs, neurons: 2),
+                        ActivationFunction.ReLu =>
+                            new Layer<NumberTypeT, ReLu<NumberTypeT>>(outputLayerInputs, neurons: 2),
+                        ActivationFunction.SiLu =>
+                            new Layer<NumberTypeT, SiLu<NumberTypeT>>(outputLayerInputs, neurons: 2),
                         ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(
                             outputLayerInputs,
-                            2),
-                        _ => throw new InvalidOperationException("Invalid activation function."),
+                            neurons: 2),
+                        _ => throw new InvalidOperationException(message: "Invalid activation function."),
                     });
             }
 
             _neuralNetwork = new NeuralNetwork<NumberTypeT>(layers.ToArray());
-            _neuralNetwork.RandomizeWeights(WeightsMean, WeightsStdDev);
 
             _networkTrainer = CostFunction switch
             {
@@ -187,17 +192,15 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
 
-            _inferenceBuffer = new InferenceBuffer<NumberTypeT>(_neuralNetwork);
-
             CostPlot!.Clear();
             LearningRatePlot!.Clear();
             AccuracyPlot!.Clear();
 
-            var safeArea = ConvexHull();
+            IList<Vector2D> safeArea = ConvexHull();
             Polygon safeAreaPolygon = TrainingDataPlot.Add.Polygon(
                 safeArea.Select(static vec => new Coordinates(vec.X, vec.Y)).ToArray());
             safeAreaPolygon.LineWidth = 0;
-            safeAreaPolygon.FillColor = Colors.LightGray.WithAlpha(.5);
+            safeAreaPolygon.FillColor = Colors.LightGray.WithAlpha(alpha: .5);
 
             DataLogger costPlot = CostPlot.Add.DataLogger();
             costPlot.Axes.XAxis            = CostPlot.Axes.Bottom;
@@ -221,11 +224,11 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
             accuracyPlot.ManageAxisLimits      = true;
             accuracyPlot.AxisManager           = new ConstantSlide { PaddingFractionY = .01, Width = 100 };
-            accuracyPlot.Add(_networkTrainer.Epoch, _neuralNetwork.CalculateAccuracy(_inferenceBuffer, trainingData));
+            accuracyPlot.Add(_networkTrainer.Epoch, _neuralNetwork.CalculateAccuracy(trainingData));
 
             Refresh!();
 
-            Stopwatch sw = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -240,9 +243,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 }
                 costPlot.Add(_networkTrainer.Epoch, _networkTrainer.CalculateAverageCost());
                 learningRatePlot.Add(_networkTrainer.Epoch, _networkTrainer.LearningRate);
-                accuracyPlot.Add(
-                    _networkTrainer.Epoch,
-                    _neuralNetwork.CalculateAccuracy(_inferenceBuffer, trainingData));
+                accuracyPlot.Add(_networkTrainer.Epoch, _neuralNetwork.CalculateAccuracy(trainingData));
 
                 if (sw.ElapsedMilliseconds >= 100)
                 {
@@ -256,6 +257,7 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
                 Refresh!();
             }
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             Console.WriteLine(ex);
@@ -272,24 +274,22 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
         const NumberTypeT delta    = 0.25f;
         var               vertexes = new List<Vector2D>();
 
-        Span<NumberTypeT> results = stackalloc NumberTypeT[2];
         for (NumberTypeT x = TotalArea.Start.X; x <= TotalArea.End.X; x += delta)
         {
             for (NumberTypeT y = TotalArea.Start.Y; y <= TotalArea.End.Y; y += delta)
             {
-                results.Clear();
-                _neuralNetwork!.RunInference(_inferenceBuffer!, [x, y], results);
+                var results = _neuralNetwork!.RunInference((NumberTypeT[]) [x, y]);
                 if (TrainingHelpers.IsSafeish(results)) vertexes.Add(new Vector2D(x, y));
             }
         }
 
         if (vertexes.Count < 2) return [];
 
-        ConvexHullCreationResult<Vector2D> result = MIConvexHull.ConvexHull.Create2D(vertexes, tolerance: delta);
+        ConvexHullCreationResult<Vector2D> result = MIConvexHull.ConvexHull.Create2D(vertexes, delta);
         if (result.Outcome == ConvexHullCreationResultOutcome.Success) return result.Result;
 
         Console.WriteLine(
-            $"Error generating convex hull: {result.Outcome} | {result.ErrorMessage} (points: {string.Join(", ", vertexes)})");
+            $"Error generating convex hull: {result.Outcome} | {result.ErrorMessage} (points: {string.Join(separator: ", ", vertexes)})");
         return [];
     }
 
@@ -300,40 +300,40 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
         {
             if (_neuralNetwork is null)
             {
-                var msgBox = MessageBoxManager.GetMessageBoxStandard(
-                    "No Network Under Training!",
-                    "Please start training a network to save it.",
+                IMsBox<ButtonResult> msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    title: "No Network Under Training!",
+                    text: "Please start training a network to save it.",
                     ButtonEnum.Ok,
                     Icon.Error);
                 await msgBox.ShowAsPopupAsync(window).ConfigureAwait(continueOnCapturedContext: false);
                 return;
             }
-            using var file = await window.StorageProvider.SaveFilePickerAsync(
-                                 new FilePickerSaveOptions
-                                 {
-                                     Title            = "Save AI Model",
-                                     DefaultExtension = ".sai.nn",
-                                     FileTypeChoices =
-                                     [
-                                         new FilePickerFileType("Neural Network Model")
-                                         {
-                                             Patterns = ["*.sai.nn"]
-                                         },
-                                     ],
-                                     ShowOverwritePrompt = true,
-                                 }).ConfigureAwait(continueOnCapturedContext: false);
+            using IStorageFile? file = await window.StorageProvider.SaveFilePickerAsync(
+                                           new FilePickerSaveOptions
+                                           {
+                                               Title            = "Save AI Model",
+                                               DefaultExtension = ".sai.nn",
+                                               FileTypeChoices =
+                                               [
+                                                   new FilePickerFileType(name: "Neural Network Model")
+                                                   {
+                                                       Patterns = ["*.sai.nn"],
+                                                   },
+                                               ],
+                                               ShowOverwritePrompt = true,
+                                           }).ConfigureAwait(continueOnCapturedContext: false);
             if (file is null)
             {
-                var msgBox = MessageBoxManager.GetMessageBoxStandard(
-                    "No File Selected!",
-                    "Please select a file to save your model.",
+                IMsBox<ButtonResult> msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    title: "No File Selected!",
+                    text: "Please select a file to save your model.",
                     ButtonEnum.Ok,
                     Icon.Error);
                 await msgBox.ShowAsPopupAsync(window).ConfigureAwait(continueOnCapturedContext: false);
                 return;
             }
 
-            await using (var stream = await file.OpenWriteAsync().ConfigureAwait(continueOnCapturedContext: false))
+            await using (Stream stream = await file.OpenWriteAsync().ConfigureAwait(continueOnCapturedContext: false))
             {
                 try
                 {
@@ -349,8 +349,8 @@ internal sealed partial class FruitTrainingViewModel : ObservableObject
             }
 
             {
-                var msgBox = MessageBoxManager.GetMessageBoxStandard(
-                    "Model Saved!",
+                IMsBox<ButtonResult> msgBox = MessageBoxManager.GetMessageBoxStandard(
+                    title: "Model Saved!",
                     $"Model successfully saved to {file.Name}.",
                     ButtonEnum.Ok,
                     Icon.Success);
