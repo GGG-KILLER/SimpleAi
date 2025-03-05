@@ -5,7 +5,7 @@ using SimpleAi.UI.ViewModels;
 
 namespace SimpleAi.UI.Views;
 
-public partial class FruitTraining : UserControl
+internal sealed partial class FruitTraining : UserControl
 {
     public FruitTraining()
     {

@@ -61,12 +61,12 @@ internal static class TrainingHelpers
     }
 
     public static double CalculateAccuracy(
-        this NeuralNetwork<NumberTypeT>  neuralNetwork,
-        TrainingDataPoint<NumberTypeT>[] checkDataPoints)
+        this NeuralNetwork<NumberTypeT> neuralNetwork,
+        ITrainingData<NumberTypeT>      checkData)
     {
         var hits = 0;
 
-        foreach (TrainingDataPoint<NumberTypeT> point in checkDataPoints)
+        foreach (TrainingDataPoint<NumberTypeT> point in checkData)
         {
             var outputs = neuralNetwork.RunInference(point.Inputs);
 
@@ -74,7 +74,7 @@ internal static class TrainingHelpers
                 hits++;
         }
 
-        return (double) hits / checkDataPoints.Length;
+        return (double) hits / checkData.Length;
     }
 
     public static bool IsSafeish(in ReadOnlyTensorSpan<NumberTypeT> outputs) => outputs[0] > outputs[1];

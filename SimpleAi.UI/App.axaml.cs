@@ -5,7 +5,7 @@ using SimpleAi.UI.Views;
 
 namespace SimpleAi.UI;
 
-public class App : Application
+internal sealed class App : Application
 {
     public override void Initialize()
     {

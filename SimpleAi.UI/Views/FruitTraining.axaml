@@ -61,14 +61,6 @@
                 <NumericUpDown Name="BatchSizeText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
                                Maximum="10000" Value="{Binding BatchSize, Mode=TwoWay}"
                                ParsingNumberStyle="None" ClipValueToMinMax="True" />
-                <Label Target="WeightsMeanText">Weights' Mean*</Label>
-                <NumericUpDown Name="WeightsMeanText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.000001"
-                               Maximum="10000000" Value="{Binding WeightsMean, Mode=TwoWay}"
-                               ParsingNumberStyle="AllowDecimalPoint" />
-                <Label Target="WeightsStdDevText">Weights' Std. Dev.*</Label>
-                <NumericUpDown Name="WeightsStdDevText" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0.00001"
-                               Maximum="100000" Value="{Binding WeightsStdDev, Mode=TwoWay}"
-                               ParsingNumberStyle="AllowDecimalPoint" />
                 <Label Target="SafePointsCount">Safe points*</Label>
                 <NumericUpDown Name="SafePointsCount" Margin="0 2" HorizontalAlignment="Stretch" Minimum="0"
                                Maximum="100000000" Value="{Binding SafePoints, Mode=TwoWay}"
