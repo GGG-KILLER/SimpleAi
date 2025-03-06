@@ -160,17 +160,6 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         static int DivideRoundingUp(int dividend, int divisor) => (dividend + divisor - 1) / divisor;
     }
 
-    /// <inheritdoc cref="NetworkTrainer(NeuralNetwork{T},ITrainingData{T},int,bool,bool)" />
-    /// <param name="trainingDataPoints">The data points to be used in training.</param>
-    [PublicAPI]
-    public NetworkTrainer(
-        NeuralNetwork<T>                  network,
-        IEnumerable<TrainingDataPoint<T>> trainingDataPoints,
-        TrainingParameters<T>             trainingParameters) : this(
-        network,
-        new InMemoryTrainingData<T>(trainingDataPoints ?? throw new ArgumentNullException(nameof(trainingDataPoints))),
-        trainingParameters) { }
-
     /// <inheritdoc />
     [PublicAPI]
     public ITrainingData<T> TrainingData { get; }
