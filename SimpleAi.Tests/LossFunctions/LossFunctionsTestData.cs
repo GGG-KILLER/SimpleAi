@@ -1,6 +1,6 @@
-namespace SimpleAi.Tests.CostFunctions;
+namespace SimpleAi.Tests.LossFunctions;
 
-internal static class CostFunctionsTestData
+internal static class LossFunctionsTestData
 {
     public static TheoryData<int> InputSizes => [1, 2, 4, 8, 10, 16, 32, 64, 100, 128, 1000];
 

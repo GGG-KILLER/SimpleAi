@@ -6,5 +6,5 @@ internal enum ActivationFunction
     TanH,
     ReLu,
     SiLu,
-    SoftMax,
+    Softmax,
 }

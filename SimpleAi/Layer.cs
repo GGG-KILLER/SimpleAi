@@ -91,6 +91,12 @@ public abstract class Layer<T> where T : IFloatingPoint<T>
     [PublicAPI]
     public ReadOnlyTensorSpan<T> Biases => MutBiases;
 
+    /// <summary>
+    /// The activation type being used by this layer.
+    /// </summary>
+    [PublicAPI]
+    public abstract Type ActivationType { get; }
+
     /// <summary>Runs inference for this layer.</summary>
     /// <param name="inputs">The inputs to be processed by this layer.</param>
     /// <exception cref="ArgumentException">
@@ -111,21 +117,21 @@ public abstract class Layer<T> where T : IFloatingPoint<T>
     [PublicAPI]
     protected internal abstract Tensor<T> CalculateActivationDerivatives(in ReadOnlyTensorSpan<T> weightedInputs);
 
-    /// <summary>Applies the supplied cost gradients to the weights and biases.</summary>
-    /// <param name="weightGradientCosts">The cost gradients to apply to the weights.</param>
-    /// <param name="biasGradientCosts">The bias cost gradients to apply to the biases.</param>
-    /// <param name="learnRate">The learn rate to apply the cost gradients with.</param>
+    /// <summary>Applies the supplied loss gradients to the weights and biases.</summary>
+    /// <param name="weightGradientLosses">The loss gradients to apply to the weights.</param>
+    /// <param name="biasGradientLosses">The bias loss gradients to apply to the biases.</param>
+    /// <param name="learnRate">The learn rate to apply the loss gradients with.</param>
     [PublicAPI]
-    protected internal virtual void ApplyCostGradients(
-        in ReadOnlyTensorSpan<T> weightGradientCosts,
-        in ReadOnlyTensorSpan<T> biasGradientCosts,
+    protected internal virtual void ApplyLossGradients(
+        in ReadOnlyTensorSpan<T> weightGradientLosses,
+        in ReadOnlyTensorSpan<T> biasGradientLosses,
         T                        learnRate)
     {
-        // weights -= weightGradientCosts * learnRate
-        Tensor.Subtract<T>(MutWeights, Tensor.Multiply(weightGradientCosts, learnRate), MutWeights);
+        // weights -= weightGradientLosses * learnRate
+        Tensor.Subtract<T>(MutWeights, Tensor.Multiply(weightGradientLosses, learnRate), MutWeights);
 
-        // biases -= biasGradientCosts * learnRate
-        Tensor.Subtract<T>(MutBiases, Tensor.Multiply(biasGradientCosts, learnRate), MutBiases);
+        // biases -= biasGradientLosses * learnRate
+        Tensor.Subtract<T>(MutBiases, Tensor.Multiply(biasGradientLosses, learnRate), MutBiases);
     }
 }
 
@@ -143,6 +149,8 @@ public sealed class Layer<T, TActivation> : Layer<T>
     public Layer(Tensor<T> weights, Tensor<T> biases) : base(weights, biases) { }
 
     /// <inheritdoc />
+    public override Type ActivationType => typeof(TActivation);
+
     /// <inheritdoc />
     public override Tensor<T> RunInference(in ReadOnlyTensorSpan<T> inputs, out Tensor<T> unactivatedOutputs)
     {

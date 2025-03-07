@@ -22,7 +22,7 @@ public class SoftMaxFloatTests
             }
             for (var idx = 0; idx < inputSize; idx++) expected[idx] = float.Exp(inputs[idx]) / expSum;
 
-            var outputs = SoftMax<float>.Activate(inputs);
+            var outputs = Softmax<float>.Activate(inputs);
 
             for (var i = 0; i < inputSize; i++) Assert.Equal(expected[i], outputs[i], tolerance: 0.00001);
         }

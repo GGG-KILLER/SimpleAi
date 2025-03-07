@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 using System.Numerics.Tensors;
 using JetBrains.Annotations;
@@ -29,7 +28,7 @@ public interface IActivationFunction<T>
 /// <summary>
 ///     <c>S(x) = 1 / (1 + exp(-x))</c>
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T"><inheritdoc /></typeparam>
 [PublicAPI]
 public readonly struct Sigmoid<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
 {
@@ -45,31 +44,31 @@ public readonly struct Sigmoid<T> : IActivationFunction<T> where T : IExponentia
 }
 
 /// <summary>
-///     <c>T(x) = (x^2 - 1)/(x^2 + 1)</c>
+///     <c>tanh(x) = (e^{2x} - 1)/(e^{2x} + 1)</c>
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T"><inheritdoc /></typeparam>
 [PublicAPI]
 public readonly struct TanH<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
 {
     /// <inheritdoc />
     public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs)
     {
-        Tensor<T> e2 = Tensor.Exp<T>(Tensor.Multiply(inputs, T.One + T.One));
-        return Tensor.Divide<T>(Tensor.Subtract(e2, T.One), Tensor.Add(e2, T.One));
+        Tensor<T> e2X = Tensor.Exp<T>(Tensor.Multiply(inputs, T.One + T.One));
+        return Tensor.Divide<T>(Tensor.Subtract(e2X, T.One), Tensor.Add(e2X, T.One));
     }
 
     /// <inheritdoc />
     public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
     {
-        Tensor<T> x = Activate(inputs);
-        return Tensor.Subtract(T.One, Tensor.Multiply<T>(x, x));
+        Tensor<T> tanhX = Activate(inputs);
+        return Tensor.Subtract(T.One, Tensor.Multiply<T>(tanhX, tanhX));
     }
 }
 
 /// <summary>
-///     <c>R(x) = max(x, 0)</c>
+///     <c>ReLU(x) = max(x, 0)</c>
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T"><inheritdoc /></typeparam>
 [PublicAPI]
 public readonly struct ReLu<T> : IActivationFunction<T> where T : INumber<T> // Tensor.Max, T.Zero, T.One, operator >
 {
@@ -79,25 +78,21 @@ public readonly struct ReLu<T> : IActivationFunction<T> where T : INumber<T> // 
     /// <inheritdoc />
     public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
     {
-        Tensor<T> outputs = Tensor.Create<T>(inputs.Lengths);
+        Tensor<T>                        outputs           = Tensor.Create<T>(inputs.Lengths);
+        TensorSpan<T>.Enumerator         outputsEnumerator = outputs.AsTensorSpan().GetEnumerator();
+        ReadOnlyTensorSpan<T>.Enumerator inputsEnumerator  = inputs.GetEnumerator();
+        while (inputsEnumerator.MoveNext() && outputsEnumerator.MoveNext())
         {
-            TensorSpan<T>.Enumerator         outputsEnumerator = outputs.AsTensorSpan().GetEnumerator();
-            ReadOnlyTensorSpan<T>.Enumerator inputsEnumerator  = inputs.GetEnumerator();
-            while (inputsEnumerator.MoveNext())
-            {
-                bool moved = outputsEnumerator.MoveNext();
-                Debug.Assert(moved);
-                outputsEnumerator.Current = inputsEnumerator.Current > T.Zero ? T.One : T.Zero;
-            }
+            outputsEnumerator.Current = inputsEnumerator.Current > T.Zero ? T.One : T.Zero;
         }
         return outputs;
     }
 }
 
 /// <summary>
-///     <c>S(x) = x / (1 + exp(-x))</c>
+///     <c>SiLU(x) = x / (1 + exp(-x))</c>
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T"><inheritdoc /></typeparam>
 [PublicAPI]
 public readonly struct SiLu<T> : IActivationFunction<T>
     where T : INumberBase<T>, // T.One
@@ -128,22 +123,17 @@ public readonly struct SiLu<T> : IActivationFunction<T>
 /// <summary>
 ///     <c>S(x) = exp(x)/sum(exp(x))</c>
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <remarks>
+/// <b>HAS NOT BEEN IMPLEMENTED ENTIRELY:</b> Usage of this activation function for training in cases other than as the function of the output layer with the <see cref="MultiClassCrossEntropy{T}"/> loss function.
+/// </remarks>
+/// <typeparam name="T"><inheritdoc /></typeparam>
 [PublicAPI]
-public readonly struct SoftMax<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
+public readonly struct Softmax<T> : IActivationFunction<T> where T : IExponentialFunctions<T>
 {
     /// <inheritdoc />
     public static Tensor<T> Activate(in ReadOnlyTensorSpan<T> inputs) => Tensor.SoftMax(inputs);
 
     /// <inheritdoc />
     public static Tensor<T> Derivative(in ReadOnlyTensorSpan<T> inputs)
-    {
-        Tensor<T> exp    = Tensor.Exp(inputs);
-        var       expSum = Tensor.Sum<T>(exp);
-
-        // (exp * expSum - exp * exp) / (expSum * expSum)
-        return Tensor.Divide(
-            Tensor.Subtract<T>(Tensor.Multiply(exp, expSum), Tensor.Multiply<T>(exp, exp)),
-            expSum * expSum);
-    }
+        => throw new NotSupportedException("Softmax usage not supported.");
 }

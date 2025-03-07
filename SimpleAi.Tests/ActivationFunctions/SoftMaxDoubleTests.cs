@@ -22,7 +22,7 @@ public class SoftMaxDoubleTests
             }
             for (var idx = 0; idx < inputSize; idx++) expected[idx] = double.Exp(inputs[idx]) / expSum;
 
-            var outputs = SoftMax<double>.Activate(inputs);
+            var outputs = Softmax<double>.Activate(inputs);
 
             for (var i = 0; i < inputSize; i++) Assert.Equal(expected[i], outputs[i], tolerance: 0.00001);
         }

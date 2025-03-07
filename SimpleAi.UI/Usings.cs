@@ -1,1 +1,1 @@
-global using NumberTypeT = float;
+global using NumberTypeT = double;

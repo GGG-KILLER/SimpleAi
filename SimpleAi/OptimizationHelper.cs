@@ -1,10 +1,13 @@
 ﻿using System.Numerics;
 using System.Numerics.Tensors;
+using JetBrains.Annotations;
 
 namespace SimpleAi;
 
-internal static class GradientDescent
+[PublicAPI]
+public static class OptimizationHelper
 {
+    [PublicAPI]
     public static Tensor<T> CalculateHiddenLayerTrailingDerivatives<T>(
         Layer<T>                 currentLayer,
         Layer<T>                 nextLayer,
@@ -53,11 +56,12 @@ internal static class GradientDescent
         return currentTrailingDerivatives;
     }
 
+    [PublicAPI]
     public static Tensor<T> CalculateOutputLayerTrailingDerivatives<T, TCost>(
         Layer<T>                 layer,
         in ReadOnlyTensorSpan<T> expectedOutputs,
         in ReadOnlyTensorSpan<T> unactivatedOutputs,
-        in ReadOnlyTensorSpan<T> actualOutputs) where T : IFloatingPoint<T> where TCost : ICostFunction<T>
+        in ReadOnlyTensorSpan<T> actualOutputs) where T : IFloatingPoint<T> where TCost : ILossFunction<T>
     {
         ArgumentNullException.ThrowIfNull(layer);
         // Input data needs to be the exact size.
@@ -70,17 +74,29 @@ internal static class GradientDescent
         if (!actualOutputs.Lengths.SequenceEqual([layer.Neurons]))
             throw new ArgumentException(message: "Actual outputs has invalid size.", nameof(actualOutputs));
 
+        // Simplification of the gradient for cross-entropy cases.
+        if (layer.ActivationType.IsGenericType
+            && typeof(TCost).IsGenericType
+            && ((layer.ActivationType.GetGenericTypeDefinition() == typeof(Softmax<>)
+                 && typeof(TCost).GetGenericTypeDefinition() == typeof(MultiClassCrossEntropy<>))
+                || (layer.ActivationType.GetGenericTypeDefinition() == typeof(Sigmoid<>)
+                    && typeof(TCost).GetGenericTypeDefinition() == typeof(BinaryCrossEntropy<>))))
+        {
+            return Tensor.Subtract(actualOutputs, expectedOutputs);
+        }
+
         var costDerivatives       = TCost.Derivative(expectedOutputs, actualOutputs);
         var activationDerivatives = layer.CalculateActivationDerivatives(unactivatedOutputs);
         return Tensor.Multiply<T>(activationDerivatives, costDerivatives);
     }
 
-    public static void UpdateLayerGradients<T>(
-        Layer<T>                 layer,
-        in ReadOnlyTensorSpan<T> inputs,
-        in ReadOnlyTensorSpan<T> trailingDerivatives,
-        Tensor<T>                weightCostGradients,
-        Tensor<T>                biasCostGradients) where T : IFloatingPoint<T>
+    [PublicAPI]
+    public static void CalculateLayerGradients<T>(
+        Layer<T>                  layer,
+        in  ReadOnlyTensorSpan<T> inputs,
+        in  ReadOnlyTensorSpan<T> trailingDerivatives,
+        out Tensor<T>             weightCostGradients,
+        out Tensor<T>             biasCostGradients) where T : IFloatingPoint<T>
     {
         ArgumentNullException.ThrowIfNull(layer);
         if (!inputs.Lengths.SequenceEqual([layer.Inputs]))
@@ -89,14 +105,9 @@ internal static class GradientDescent
             throw new ArgumentException(
                 message: "Trailing derivatives does match Layer's amount of nodes.",
                 nameof(trailingDerivatives));
-        if (!weightCostGradients.Lengths.SequenceEqual(layer.Weights.Lengths))
-            throw new ArgumentException(
-                message: "Weight cost gradients' dimensions does not match layer's weights' dimensions.",
-                nameof(weightCostGradients));
-        if (!biasCostGradients.Lengths.SequenceEqual([layer.Neurons]))
-            throw new ArgumentException(
-                message: "Bias cost gradients' size does not match layer's neurons.",
-                nameof(biasCostGradients));
+
+        weightCostGradients = Tensor.Create<T>(layer.Weights.Lengths);
+        biasCostGradients   = Tensor.Create<T>(layer.Biases.Lengths);
 
         for (nint nodeIdx = 0; nodeIdx < layer.Neurons; nodeIdx++)
         {
@@ -109,10 +120,7 @@ internal static class GradientDescent
                  *               -------- = -------- x ---- x trailingDerivatives_n
                  *               ∂w_{n,i}   ∂w_{n,i}   ∂z_n
                  */
-                T weightDerivative = inputs[inputIdx] * nodeTrailingDerivatives;
-
-                // Adds to the gradient costs as we're doing this for one of the data points, and we want the final result to be the average of all of them.
-                weightCostGradients[nodeIdx, inputIdx] += weightDerivative;
+                weightCostGradients[nodeIdx, inputIdx] = inputs[inputIdx] * nodeTrailingDerivatives;
             }
         }
 
@@ -122,6 +130,6 @@ internal static class GradientDescent
          *               ∂b_n   ∂b_n
          * And, since z_n = a_n * w_n + b_n, nothing directly affects the bias, so it's a constant, so its derivative is one since the derivative of a constant is one.
          */
-        Tensor.Add(biasCostGradients, trailingDerivatives, biasCostGradients);
+        trailingDerivatives.CopyTo(biasCostGradients);
     }
 }

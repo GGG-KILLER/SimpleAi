@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics.Tensors;
 using SimpleAi.UI.Maths;
 
@@ -64,16 +65,9 @@ internal static class TrainingHelpers
         this NeuralNetwork<NumberTypeT> neuralNetwork,
         ITrainingData<NumberTypeT>      checkData)
     {
-        var hits = 0;
-
-        foreach (TrainingDataPoint<NumberTypeT> point in checkData)
-        {
-            var outputs = neuralNetwork.RunInference(point.Inputs);
-
-            if (Tensor.IndexOfMax<NumberTypeT>(point.ExpectedOutputs) == Tensor.IndexOfMax<NumberTypeT>(outputs))
-                hits++;
-        }
-
+        int hits = checkData.AsParallel().Count(
+            point => Tensor.IndexOfMax<NumberTypeT>(point.ExpectedOutputs)
+                     == Tensor.IndexOfMax<NumberTypeT>(neuralNetwork.RunInference(point.Inputs)));
         return (double) hits / checkData.Length;
     }
 

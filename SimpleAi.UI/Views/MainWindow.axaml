@@ -11,5 +11,8 @@
         <TabItem Header="Fruit">
             <views:FruitTraining />
         </TabItem>
+        <TabItem Header="Digits">
+            <views:DigitTraining />
+        </TabItem>
     </TabControl>
 </Window>

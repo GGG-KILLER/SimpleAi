@@ -15,11 +15,10 @@ internal sealed partial class FruitTrainingViewModel : TrainingBaseViewModel
 {
     private Polygon? _safeAreaPolygon;
 
-    public FruitTrainingViewModel()
+    public FruitTrainingViewModel() : base(LossFunction.BinaryCrossEntropy)
     {
         HiddenActivationFunction = ActivationFunction.ReLu;
-        OutputActivationFunction = ActivationFunction.SoftMax;
-        CostFunction             = CostFunction.CrossEntropy;
+        OutputActivationFunction = ActivationFunction.Softmax;
         LearningRate             = 0.05f;
         LearningRateDecay        = 0.04f;
         BatchSize                = 20;
@@ -48,14 +47,14 @@ internal sealed partial class FruitTrainingViewModel : TrainingBaseViewModel
     protected override int NetworkOutputs => 2;
 
     /// <inheritdoc />
-    protected override ValueTask<ITrainingData<NumberTypeT>> GenerateTrainingData()
+    protected override ValueTask<ITrainingData<NumberTypeT>> GetTrainingData()
     {
         TrainingDataPlot!.Clear();
-        return GenerateTestData();
+        return GetTestData();
     }
 
     /// <inheritdoc />
-    protected override ValueTask<ITrainingData<NumberTypeT>> GenerateTestData()
+    protected override ValueTask<ITrainingData<NumberTypeT>> GetTestData()
     {
         TrainingDataPoint<NumberTypeT>[] trainingData = TrainingHelpers.GenerateTrainingData(
             TotalArea,

@@ -30,73 +30,30 @@ public interface INetworkTrainer<T> where T : IFloatingPoint<T>
     [PublicAPI]
     T LearningRate { get; }
 
-    /// <summary>Returns the average cost for all training data.</summary>
-    /// <returns>The average cost for all training data.</returns>
+    /// <summary>Returns the average loss for all training data.</summary>
+    /// <returns>The average loss for all training data.</returns>
     [PublicAPI]
-    T CalculateAverageCost();
+    T CalculateAverageLoss();
 
     /// <summary>Executes a single training iteration using the provided learning rate.</summary>
     [PublicAPI]
     void RunTrainingIteration();
 }
 
-/// <summary>Parameters used while training the network.</summary>
-/// <typeparam name="T">The number type used by the <see cref="NeuralNetwork{T}" />.</typeparam>
-[PublicAPI]
-public readonly record struct TrainingParameters<T>()
-{
-    /// <summary>The initial learning rate to use with the network.</summary>
-    [PublicAPI]
-    public required T InitialLearnRate { get; init; }
-
-    /// <summary>Percentage at which the learning rate will be reduced after each epoch (in the 0 to 100 range).</summary>
-    /// <remarks>
-    ///     <para>The learning rate will be <c>100% - (epoch * decay)%</c> at any given point in training.</para>
-    ///     <para>
-    ///         So, for example, if the training is on its 3rd epoch, and the decay is <c>4%</c> per epoch, the learning rate
-    ///         will be <c>92%</c> of the <see cref="InitialLearnRate" />.
-    ///     </para>
-    /// </remarks>
-    [PublicAPI]
-    public required T LearnRateDecay { get; init; }
-
-    /// <summary>
-    ///     <para>The size of each mini-batch, if mini-batch training should be used.</para>
-    ///     <para>The default is to not use mini-batch training.</para>
-    /// </summary>
-    [PublicAPI]
-    public int? BatchSize { get; init; } = null;
-
-    /// <summary>
-    ///     <para>Whether to shuffle the training data after each epoch.</para>
-    ///     <para>Default: true</para>
-    /// </summary>
-    [PublicAPI]
-    public bool ShuffleDataAfterEpoch { get; init; } = true;
-
-    /// <summary>
-    ///     <para>Whether to run training in parallel using multiple threads.</para>
-    ///     <para>Not recommended if your network is small or there isn't much training data in each mini-batch.</para>
-    ///     <para>Default: true</para>
-    /// </summary>
-    [PublicAPI]
-    public bool ParallelizeTraining { get; init; } = true;
-}
-
 /// <summary>The class responsible for doing the training for a neural network.</summary>
 /// <typeparam name="T">The number type used by the neural network.</typeparam>
-/// <typeparam name="TCost">The cost function to be used in training.</typeparam>
+/// <typeparam name="TLoss">The loss function to be used in training.</typeparam>
 /// <remarks>
 ///     This class creates some very large buffers that will probably end in the Large Object Heap. It is recommended
 ///     to do the training in a separate process that can be killed so the training buffers are not left in memory due to
 ///     being in the Large Object Heap.
 /// </remarks>
 [PublicAPI]
-public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
-    where T : IFloatingPoint<T> where TCost : ICostFunction<T>
+public sealed class NetworkTrainer<T, TLoss> : INetworkTrainer<T>
+    where T : IFloatingPoint<T> where TLoss : ILossFunction<T>
 {
     private readonly int                                  _batchCount, _derivativeArraySize;
-    private readonly LayerCostGradients[]                 _costGradients;
+    private readonly LayerLossGradients[]                 _lossGradients;
     private readonly ObjectPool<LayerInferenceData[]>     _layerDataPool;
     private readonly NeuralNetwork<T>                     _network;
     private readonly MemoryIterator<TrainingDataPoint<T>> _trainingDataBatchIterator = new();
@@ -145,16 +102,7 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
             CreateLayerDataArray,
             trainingParameters.ParallelizeTraining ? Environment.ProcessorCount : 1);
 
-        ReadOnlySpan<Layer<T>> layers        = _network.Layers;
-        var                    costGradients = new LayerCostGradients[layers.Length];
-        for (var idx = 0; idx < costGradients.Length; idx++)
-        {
-            Layer<T> layer = layers[idx];
-            costGradients[idx] = new LayerCostGradients(
-                Tensor.Create<T>([layer.Neurons, layer.Inputs]),
-                Tensor.Create<T>([layer.Neurons]));
-        }
-        _costGradients = costGradients;
+        _lossGradients = CreateLossGradients();
         return;
 
         static int DivideRoundingUp(int dividend, int divisor) => (dividend + divisor - 1) / divisor;
@@ -184,57 +132,63 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
 
     /// <inheritdoc />
     [PublicAPI]
-    public T CalculateAverageCost()
+    public T CalculateAverageLoss()
     {
-        T totalCost = T.AdditiveIdentity;
-        foreach (TrainingDataPoint<T> point in TrainingData)
+        if (_trainingParameters.ParallelizeTraining)
         {
-            var inference = _network.RunInference((Tensor<T>) point.Inputs);
-            totalCost += TCost.Calculate(point.ExpectedOutputs, inference);
+            return TrainingData.AsParallel().Select(
+                                   point => TLoss.Calculate(
+                                       point.ExpectedOutputs,
+                                       _network.RunInference((Tensor<T>) point.Inputs)))
+                               .Aggregate(T.AdditiveIdentity, static (acc, next) => acc + next)
+                   / T.CreateChecked(TrainingData.Length);
         }
-        return totalCost / T.CreateChecked(TrainingData.Length);
+
+        return TrainingData.Select(
+                               point => TLoss.Calculate(
+                                   point.ExpectedOutputs,
+                                   _network.RunInference((Tensor<T>) point.Inputs)))
+                           .Aggregate(T.AdditiveIdentity, static (acc, next) => acc + next)
+               / T.CreateChecked(TrainingData.Length);
     }
 
     /// <inheritdoc />
     [PublicAPI]
     public void RunTrainingIteration()
     {
-        // Clear cost gradients so they don't get interference from other runs.
-        foreach (LayerCostGradients costGradient in _costGradients)
+        // Clear loss gradients so they don't get interference from other runs.
+        for (var idx = 0; idx < _lossGradients.Length; idx++)
         {
-            costGradient.ForWeights.Clear();
-            costGradient.ForBiases.Clear();
+            Layer<T>           layer        = _network.Layers[idx];
+            LayerLossGradients lossGradient = _lossGradients[idx];
+
+            lossGradient.ForWeights ??= Tensor.Create<T>(layer.Weights.Lengths);
+            lossGradient.ForWeights.Clear();
+            lossGradient.ForBiases ??= Tensor.Create<T>(layer.Biases.Lengths);
+            lossGradient.ForBiases.Clear();
         }
 
+        LayerLossGradients[] lossGradients;
+        _trainingDataBatchIterator.Memory = CurrentBatch;
         if (_trainingParameters.ParallelizeTraining)
         {
-            _trainingDataBatchIterator.Memory = CurrentBatch;
-            Parallel.ForEach(
-                _trainingDataBatchIterator,
-                () => _layerDataPool.Rent(),
-                (trainingDataPoint, _, tempLayerData) =>
-                {
-                    CalculateGradients(tempLayerData, trainingDataPoint);
-                    return tempLayerData;
-                },
-                tempLayerData => _layerDataPool.Return(tempLayerData));
+            lossGradients = _trainingDataBatchIterator.AsParallel().Select(CalculateGradients)
+                                                      .Aggregate(_lossGradients, CombineLossGradients);
         }
         else
         {
-            LayerInferenceData[] tempLayerData = _layerDataPool.Rent();
-            foreach (TrainingDataPoint<T> trainingDataPoint in CurrentBatch.Span)
-                CalculateGradients(tempLayerData, trainingDataPoint);
-            _layerDataPool.Return(tempLayerData);
+            lossGradients = _trainingDataBatchIterator.Select(CalculateGradients)
+                                                      .Aggregate(_lossGradients, CombineLossGradients);
         }
 
         ReadOnlySpan<Layer<T>> layers = _network.Layers;
         for (var idx = 0; idx < layers.Length; idx++)
         {
-            Layer<T>           layer         = layers[idx];
-            LayerCostGradients costGradients = _costGradients[idx];
-            layer.ApplyCostGradients(
-                costGradients.ForWeights,
-                costGradients.ForBiases,
+            Layer<T>           layer        = layers[idx];
+            LayerLossGradients lossGradient = lossGradients[idx];
+            layer.ApplyLossGradients(
+                lossGradient.ForWeights!,
+                lossGradient.ForBiases!,
                 BatchSize != TrainingData.Length ? LearningRate / T.CreateSaturating(_batchCount) : LearningRate);
         }
 
@@ -247,74 +201,92 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
                            * (T.One / (T.One + (_trainingParameters.LearnRateDecay * T.CreateSaturating(epoch))));
             if (_trainingParameters.ParallelizeTraining) TrainingData.Shuffle();
         }
+        return;
+
+        static LayerLossGradients[] CombineLossGradients(LayerLossGradients[] acc, LayerLossGradients[] next)
+        {
+            for (var idx = 0; idx < acc.Length; idx++)
+            {
+                var lossGradient      = acc[idx];
+                var batchLossGradient = next[idx];
+                Tensor.Add<T>(lossGradient.ForWeights!, batchLossGradient.ForWeights!, lossGradient.ForWeights!);
+                Tensor.Add<T>(lossGradient.ForBiases!, batchLossGradient.ForBiases!, lossGradient.ForBiases!);
+            }
+            return acc;
+        }
     }
 
-    private void CalculateGradients(LayerInferenceData[] allLayersData, TrainingDataPoint<T> trainingDataPoint)
+    private LayerLossGradients[] CalculateGradients(TrainingDataPoint<T> trainingDataPoint)
     {
-        ReadOnlySpan<Layer<T>> layers = _network.Layers;
-
-        Tensor<T> input = trainingDataPoint.Inputs;
-        for (var idx = 0; idx < layers.Length; idx++)
+        LayerInferenceData[] allLayersData = _layerDataPool.Rent();
+        try
         {
-            Layer<T>           layer     = layers[idx];
-            LayerInferenceData layerData = allLayersData[idx];
+            var                    lossGradients = CreateLossGradients();
+            ReadOnlySpan<Layer<T>> layers        = _network.Layers;
 
-            input.CopyTo(layerData.Inputs);
-            input = layer.RunInference(input, out var unactivatedOutputs);
-            unactivatedOutputs.CopyTo(layerData.UnactivatedOutputs);
-        }
-
-        // Rename just to make it easier to follow for the rest of the code.
-        var output = input;
-
-        // Update output layer gradients
-        Tensor<T> trailingDerivatives;
-        {
-            Layer<T>           outputLayer     = layers[^1];
-            LayerInferenceData outputLayerData = allLayersData[^1];
-
-            trailingDerivatives = GradientDescent.CalculateOutputLayerTrailingDerivatives<T, TCost>(
-                outputLayer,
-                trainingDataPoint.ExpectedOutputs,
-                outputLayerData.UnactivatedOutputs,
-                output);
-
-            LayerCostGradients outputLayerGradients = _costGradients[^1];
-            lock (outputLayerGradients.Lock)
+            Tensor<T> input = trainingDataPoint.Inputs;
+            for (var idx = 0; idx < layers.Length; idx++)
             {
-                GradientDescent.UpdateLayerGradients(
+                Layer<T>           layer     = layers[idx];
+                LayerInferenceData layerData = allLayersData[idx];
+
+                input.CopyTo(layerData.Inputs);
+                input = layer.RunInference(input, out var unactivatedOutputs);
+                unactivatedOutputs.CopyTo(layerData.UnactivatedOutputs);
+            }
+
+            // Rename just to make it easier to follow for the rest of the code.
+            var output = input;
+
+            // Update output layer gradients
+            Tensor<T> trailingDerivatives;
+            {
+                Layer<T>           outputLayer     = layers[^1];
+                LayerInferenceData outputLayerData = allLayersData[^1];
+
+                trailingDerivatives = OptimizationHelper.CalculateOutputLayerTrailingDerivatives<T, TLoss>(
+                    outputLayer,
+                    trainingDataPoint.ExpectedOutputs,
+                    outputLayerData.UnactivatedOutputs,
+                    output);
+
+                LayerLossGradients outputLayerGradients = lossGradients[^1];
+                OptimizationHelper.CalculateLayerGradients(
                     outputLayer,
                     outputLayerData.Inputs,
                     trailingDerivatives,
-                    outputLayerGradients.ForWeights,
-                    outputLayerGradients.ForBiases);
+                    out outputLayerGradients.ForWeights,
+                    out outputLayerGradients.ForBiases);
             }
-        }
 
-        // Update hidden layer gradients
-        for (int idx = layers.Length - 2; idx >= 0; idx--)
-        {
-            Layer<T>           layer              = layers[idx];
-            Layer<T>           nextLayer          = layers[idx + 1];
-            LayerInferenceData layerInferenceData = allLayersData[idx];
-
-            trailingDerivatives = GradientDescent.CalculateHiddenLayerTrailingDerivatives(
-                layer,
-                nextLayer,
-                layerInferenceData.Inputs,
-                layerInferenceData.UnactivatedOutputs,
-                trailingDerivatives);
-
-            LayerCostGradients layerGradients = _costGradients[idx];
-            lock (layerGradients.Lock)
+            // Update hidden layer gradients
+            for (int idx = layers.Length - 2; idx >= 0; idx--)
             {
-                GradientDescent.UpdateLayerGradients(
+                Layer<T>           layer              = layers[idx];
+                Layer<T>           nextLayer          = layers[idx + 1];
+                LayerInferenceData layerInferenceData = allLayersData[idx];
+
+                trailingDerivatives = OptimizationHelper.CalculateHiddenLayerTrailingDerivatives(
+                    layer,
+                    nextLayer,
+                    layerInferenceData.Inputs,
+                    layerInferenceData.UnactivatedOutputs,
+                    trailingDerivatives);
+
+                LayerLossGradients layerGradients = lossGradients[idx];
+                OptimizationHelper.CalculateLayerGradients(
                     layer,
                     layerInferenceData.Inputs,
                     trailingDerivatives,
-                    layerGradients.ForWeights,
-                    layerGradients.ForBiases);
+                    out layerGradients.ForWeights,
+                    out layerGradients.ForBiases);
             }
+
+            return lossGradients;
+        }
+        finally
+        {
+            _layerDataPool.Return(allLayersData);
         }
     }
 
@@ -332,10 +304,20 @@ public sealed class NetworkTrainer<T, TCost> : INetworkTrainer<T>
         return layerData;
     }
 
+    private LayerLossGradients[] CreateLossGradients()
+    {
+        var lossGradients = new LayerLossGradients[_network.Layers.Length];
+        for (var idx = 0; idx < lossGradients.Length; idx++)
+        {
+            lossGradients[idx] = new LayerLossGradients();
+        }
+        return lossGradients;
+    }
+
     private readonly record struct LayerInferenceData(Tensor<T> Inputs, Tensor<T> UnactivatedOutputs);
 
-    private readonly record struct LayerCostGradients(Tensor<T> ForWeights, Tensor<T> ForBiases)
+    private sealed class LayerLossGradients
     {
-        public object Lock { get; } = new();
+        public Tensor<T>? ForWeights, ForBiases;
     }
 }

@@ -18,7 +18,7 @@ using SimpleAi.UI.IO;
 
 namespace SimpleAi.UI.ViewModels;
 
-internal abstract partial class TrainingBaseViewModel : ObservableObject
+internal abstract partial class TrainingBaseViewModel(LossFunction lossFunction) : ObservableObject
 {
     private static readonly char[]                        s_hiddenLayersSplitters = [',', ';', ':'];
     protected readonly      SemaphoreSlim                 NeuralNetworkSemaphore  = new(initialCount: 1, maxCount: 1);
@@ -33,9 +33,6 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
 
     [ObservableProperty]
     public partial ActivationFunction OutputActivationFunction { get; set; }
-
-    [ObservableProperty]
-    public partial CostFunction CostFunction { get; set; }
 
     [ObservableProperty]
     public partial NumberTypeT LearningRate { get; set; }
@@ -79,8 +76,8 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
             // Leave UI Thread (hopefully)
             await Task.Delay(millisecondsDelay: 1, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
-            ITrainingData<NumberTypeT> trainingData = await GenerateTrainingData();
-            ITrainingData<NumberTypeT> testData     = await GenerateTestData();
+            ITrainingData<NumberTypeT> trainingData = await GetTrainingData();
+            ITrainingData<NumberTypeT> testData     = await GetTestData();
 
             int[] layerSizes = HiddenLayers.Split(
                                                s_hiddenLayersSplitters,
@@ -108,16 +105,22 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
                 ParallelizeTraining = UseMultiThreading,
             };
             NeuralNetwork = new NeuralNetwork<NumberTypeT>(layers.ToArray());
-            NetworkTrainer = CostFunction switch
+            NetworkTrainer = lossFunction switch
             {
-                CostFunction.MeanSquaredError => new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
+                LossFunction.MeanSquaredError =>
+                    new NetworkTrainer<NumberTypeT, MeanSquaredError<NumberTypeT>>(
+                        NeuralNetwork,
+                        trainingData,
+                        trainingParameters),
+                LossFunction.BinaryCrossEntropy => new NetworkTrainer<NumberTypeT, BinaryCrossEntropy<NumberTypeT>>(
                     NeuralNetwork,
                     trainingData,
                     trainingParameters),
-                CostFunction.CrossEntropy => new NetworkTrainer<NumberTypeT, CrossEntropy<NumberTypeT>>(
-                    NeuralNetwork,
-                    trainingData,
-                    trainingParameters),
+                LossFunction.MultiClassCrossEntropy =>
+                    new NetworkTrainer<NumberTypeT, MultiClassCrossEntropy<NumberTypeT>>(
+                        NeuralNetwork,
+                        trainingData,
+                        trainingParameters),
                 _ => throw new InvalidOperationException(message: "Invalid cost function."),
             };
 
@@ -125,13 +128,16 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
             LearningRatePlot!.Clear();
             AccuracyPlot!.Clear();
 
+            OnPlotsSetup();
+
             DataLogger costPlot = CostPlot.Add.DataLogger();
             costPlot.Axes.XAxis            = CostPlot.Axes.Bottom;
             costPlot.Axes.XAxis.Label.Text = "Epoch";
             costPlot.LegendText            = "Cost (should go down ideally)";
             costPlot.ManageAxisLimits      = true;
             costPlot.AxisManager           = new Slide { PaddingFractionY = .01, Width = 100 };
-            costPlot.Add(NetworkTrainer.Epoch, NetworkTrainer.CalculateAverageCost());
+            if (ShouldDoPostTrainingUpdate(0))
+                costPlot.Add(NetworkTrainer.Epoch, NetworkTrainer.CalculateAverageLoss());
 
             DataLogger learningRatePlot = LearningRatePlot.Add.DataLogger();
             learningRatePlot.Axes.XAxis            = LearningRatePlot.Axes.Bottom;
@@ -147,9 +153,8 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
             accuracyPlot.LegendText            = "Accuracy (should go up ideally)";
             accuracyPlot.ManageAxisLimits      = true;
             accuracyPlot.AxisManager           = new Slide { PaddingFractionY = .01, Width = 100 };
-            accuracyPlot.Add(NetworkTrainer.Epoch, NeuralNetwork.CalculateAccuracy(testData));
-
-            OnPlotsSetup();
+            if (ShouldDoPostTrainingUpdate(0))
+                accuracyPlot.Add(NetworkTrainer.Epoch, NeuralNetwork.CalculateAccuracy(testData));
 
             Refresh!();
 
@@ -165,20 +170,20 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
 
                     OnPreTraining();
                     NetworkTrainer.RunTrainingIteration();
-                    costPlot.Add(NetworkTrainer.Epoch, NetworkTrainer.CalculateAverageCost());
-                    learningRatePlot.Add(NetworkTrainer.Epoch, NetworkTrainer.LearningRate);
-                    accuracyPlot.Add(NetworkTrainer.Epoch, NeuralNetwork.CalculateAccuracy(testData));
                     OnPostTraining();
+                    learningRatePlot.Add(NetworkTrainer.Epoch, NetworkTrainer.LearningRate);
+
+                    if (ShouldDoPostTrainingUpdate(sw.ElapsedMilliseconds))
+                    {
+                        sw.Restart();
+                        OnPostTrainingUpdate();
+                        costPlot.Add(NetworkTrainer.Epoch, NetworkTrainer.CalculateAverageLoss());
+                        accuracyPlot.Add(NetworkTrainer.Epoch, NeuralNetwork.CalculateAccuracy(testData));
+                    }
                 }
                 finally
                 {
                     NeuralNetworkSemaphore.Release();
-                }
-
-                if (sw.ElapsedMilliseconds >= 100)
-                {
-                    sw.Restart();
-                    OnPostTrainingUpdate();
                 }
 
                 Refresh!();
@@ -205,14 +210,14 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
             ActivationFunction.TanH    => new Layer<NumberTypeT, TanH<NumberTypeT>>(inputs, neurons),
             ActivationFunction.ReLu    => new Layer<NumberTypeT, ReLu<NumberTypeT>>(inputs, neurons),
             ActivationFunction.SiLu    => new Layer<NumberTypeT, SiLu<NumberTypeT>>(inputs, neurons),
-            ActivationFunction.SoftMax => new Layer<NumberTypeT, SoftMax<NumberTypeT>>(inputs, neurons),
+            ActivationFunction.Softmax => new Layer<NumberTypeT, Softmax<NumberTypeT>>(inputs, neurons),
             _                          => throw new InvalidOperationException(message: "Invalid activation function."),
         };
     }
 
-    protected abstract ValueTask<ITrainingData<NumberTypeT>> GenerateTrainingData();
+    protected abstract ValueTask<ITrainingData<NumberTypeT>> GetTrainingData();
 
-    protected abstract ValueTask<ITrainingData<NumberTypeT>> GenerateTestData();
+    protected abstract ValueTask<ITrainingData<NumberTypeT>> GetTestData();
 
     protected virtual void OnPlotsSetup() { }
 
@@ -221,6 +226,8 @@ internal abstract partial class TrainingBaseViewModel : ObservableObject
     protected virtual void OnPreTraining() { }
 
     protected virtual void OnPostTraining() { }
+
+    protected virtual bool ShouldDoPostTrainingUpdate(long elapsedMilliseconds) => elapsedMilliseconds >= 100;
 
     protected virtual void OnPostTrainingUpdate() { }
 
